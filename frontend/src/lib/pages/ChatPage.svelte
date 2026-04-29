@@ -112,6 +112,11 @@
             messages = [...messages.slice(0, -1), last];
             warmupActive = false;
             scrollToBottom();
+          } else if (evt.type === 'thinking') {
+            last.thinking = (last.thinking || '') + evt.content;
+            messages = [...messages.slice(0, -1), last];
+            warmupActive = false;
+            scrollToBottom();
           } else if (evt.type === 'ttft') {
             liveStat = { ...(liveStat || {}), ttft_ms: evt.ms };
           } else if (evt.type === 'done') {
@@ -244,10 +249,29 @@
             {/if}
           </div>
           {#if msg.role === 'assistant'}
+            {#if msg.thinking}
+              <details class="text-xs text-muted mb-1 group/think">
+                <summary
+                  class="cursor-pointer font-mono uppercase tracking-wider hover:text-body select-none"
+                >
+                  <span class="opacity-60">▸</span> thinking
+                  {#if !msg.content}
+                    <span class="ml-1 italic">(reasoning…)</span>
+                  {/if}
+                </summary>
+                <div
+                  class="mt-1.5 pl-3 border-l-2 border-border italic font-sans whitespace-pre-wrap leading-relaxed"
+                >
+                  {msg.thinking}
+                </div>
+              </details>
+            {/if}
             <div class="markdown-body text-body">
               {#if msg.content}
                 <!-- eslint-disable-next-line svelte/no-at-html-tags — DOMPurify-sanitized in markdown.js -->
                 {@html renderMarkdown(msg.content)}
+              {:else if streaming && i === messages.length - 1 && msg.thinking}
+                <span class="text-muted italic">drafting answer…</span>
               {:else if streaming && i === messages.length - 1 && warmupActive}
                 <span class="text-muted italic"
                   >warming up {msg.model} into VRAM (cold-start can take ~10s)…</span

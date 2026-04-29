@@ -165,12 +165,18 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                     chunk = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
-                if first_token_time is None and chunk.get("message", {}).get("content"):
+                msg = chunk.get("message", {})
+                # Reasoning models (qwen3, deepseek-r1, etc.) stream into
+                # `thinking` before producing `content`. Forward both so the
+                # UI can show the model is alive instead of silently waiting.
+                if msg.get("thinking"):
+                    yield _sse({"type": "thinking", "content": msg["thinking"]})
+                if first_token_time is None and msg.get("content"):
                     first_token_time = time.perf_counter()
                     ttft_ms = int((first_token_time - start) * 1000)
                     yield _sse({"type": "ttft", "ms": ttft_ms})
-                if "message" in chunk and chunk["message"].get("content"):
-                    yield _sse({"type": "token", "content": chunk["message"]["content"]})
+                if msg.get("content"):
+                    yield _sse({"type": "token", "content": msg["content"]})
                 if chunk.get("done"):
                     eval_count = chunk.get("eval_count", 0)
                     eval_dur_ns = chunk.get("eval_duration", 1)

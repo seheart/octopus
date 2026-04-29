@@ -216,3 +216,51 @@ def test_chat_streams_ollama_chunks(monkeypatch: pytest.MonkeyPatch, client: Tes
     assert '"content": " there"' in body
     assert '"tokens_per_sec": 2.0' in body
     assert '"eval_count": 2' in body
+
+
+def test_chat_forwards_thinking_field_for_reasoning_models(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """qwen3 / deepseek-r1 etc. stream into `thinking` before `content`.
+    The backend must forward both so the UI doesn't appear frozen."""
+    chunks = [
+        json.dumps({"message": {"content": "", "thinking": "Let me think"}, "done": False}),
+        json.dumps({"message": {"content": "", "thinking": " about it"}, "done": False}),
+        json.dumps({"message": {"content": "Hi"}, "done": False}),
+        json.dumps(
+            {
+                "message": {"content": ""},
+                "done": True,
+                "eval_count": 1,
+                "eval_duration": 1_000_000_000,
+                "prompt_eval_count": 5,
+            }
+        ),
+    ]
+
+    class FakeStream:
+        async def __aenter__(self) -> "FakeStream":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def aiter_lines(self) -> Any:
+            for line in chunks:
+                yield line
+
+    fake_client = MagicMock()
+    fake_client.stream = MagicMock(return_value=FakeStream())
+    monkeypatch.setattr(main, "client", fake_client)
+
+    r = client.post(
+        "/api/chat",
+        json={"model": "qwen3:14b", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 200
+    body = r.text
+    assert '"type": "thinking"' in body
+    assert '"content": "Let me think"' in body
+    assert '"content": " about it"' in body
+    assert '"type": "token"' in body
+    assert '"content": "Hi"' in body
