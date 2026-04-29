@@ -4,8 +4,7 @@
 
   const primaryTabs = [
     { id: 'chat', label: 'Chat' },
-    { id: 'models', label: 'Models' },
-    { id: 'roadmap', label: 'Roadmap' }
+    { id: 'models', label: 'Models' }
   ];
 </script>
 
