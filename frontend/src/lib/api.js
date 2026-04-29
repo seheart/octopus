@@ -28,6 +28,56 @@ export async function getHostInfo() {
   return await r.json();
 }
 
+export async function deleteModel(name) {
+  const r = await fetch(`/api/models/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`delete failed (${r.status}): ${body}`);
+  }
+  return await r.json();
+}
+
+/**
+ * Stream a model pull. Calls onEvent for each NDJSON event Ollama emits.
+ * Returns { done, abort } — await done; call abort to cancel.
+ *
+ * @param {string} name
+ * @param {(evt: {status: string, total?: number, completed?: number, error?: string}) => void} onEvent
+ * @returns {{ done: Promise<void>, abort: () => void }}
+ */
+export function pullModel(name, onEvent) {
+  const ctrl = new AbortController();
+  const done = (async () => {
+    const resp = await fetch('/api/pull', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: name }),
+      signal: ctrl.signal
+    });
+    if (!resp.ok) throw new Error(`pull failed: ${resp.status}`);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done: streamDone } = await reader.read();
+      if (streamDone) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n\n');
+      buf = lines.pop();
+      for (const block of lines) {
+        const line = block.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        try {
+          onEvent(JSON.parse(line.slice(6)));
+        } catch (_e) {
+          /* skip malformed event */
+        }
+      }
+    }
+  })();
+  return { done, abort: () => ctrl.abort() };
+}
+
 export function fmtBytes(b) {
   if (!b) return '–';
   const gb = b / 1e9;

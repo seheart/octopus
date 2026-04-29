@@ -80,6 +80,58 @@ def test_ollama_info_when_unreachable(monkeypatch: pytest.MonkeyPatch, client: T
     assert body["version"] is None
 
 
+def test_delete_model_success(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    monkeypatch.setattr(main, "client", MagicMock(request=AsyncMock(return_value=mock_resp)))
+    r = client.delete("/api/models/qwen3:14b")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["deleted"] is True
+    assert body["model"] == "qwen3:14b"
+
+
+def test_delete_model_failure_propagates_status(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 404
+    mock_resp.text = "model not found"
+    monkeypatch.setattr(main, "client", MagicMock(request=AsyncMock(return_value=mock_resp)))
+    r = client.delete("/api/models/nonexistent:latest")
+    assert r.status_code == 404
+
+
+def test_pull_streams_progress_events(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
+    chunks = [
+        json.dumps({"status": "pulling manifest"}),
+        json.dumps({"status": "downloading", "total": 1000, "completed": 500}),
+        json.dumps({"status": "success"}),
+    ]
+
+    class FakeStream:
+        async def __aenter__(self) -> "FakeStream":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def aiter_lines(self) -> Any:
+            for line in chunks:
+                yield line
+
+    fake_client = MagicMock()
+    fake_client.stream = MagicMock(return_value=FakeStream())
+    monkeypatch.setattr(main, "client", fake_client)
+
+    r = client.post("/api/pull", json={"model": "fake:1b"})
+    assert r.status_code == 200
+    body = r.text
+    assert "pulling manifest" in body
+    assert '"completed": 500' in body
+    assert '"status": "success"' in body
+
+
 def test_host_info_returns_expected_keys(client: TestClient) -> None:
     r = client.get("/api/host")
     assert r.status_code == 200

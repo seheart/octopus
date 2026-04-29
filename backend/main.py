@@ -27,6 +27,10 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
 
 
+class PullRequest(BaseModel):
+    model: str
+
+
 @app.get("/api/models")
 async def list_models() -> dict[str, Any]:
     r = await client.get("/api/tags")
@@ -187,3 +191,47 @@ async def chat(req: ChatRequest) -> StreamingResponse:
 
 def _sse(payload: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(payload)}\n\n".encode()
+
+
+@app.delete("/api/models/{name:path}")
+async def delete_model(name: str) -> dict[str, Any]:
+    """Delete a model from Ollama. `name` may include the tag (qwen3:14b)."""
+    r = await client.request("DELETE", "/api/delete", json={"model": name})
+    if r.status_code != 200:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=r.status_code,
+            detail=f"Ollama returned {r.status_code}: {r.text}",
+        )
+    return {"deleted": True, "model": name}
+
+
+@app.post("/api/pull")
+async def pull_model(req: PullRequest) -> StreamingResponse:
+    """Stream Ollama's pull progress as SSE.
+
+    Events: {"status": "..."} for steps, with optional total/completed/digest
+    during the downloading phase. Final event is {"status": "success"}.
+    """
+
+    async def stream() -> AsyncIterator[bytes]:
+        try:
+            async with client.stream(
+                "POST",
+                "/api/pull",
+                json={"model": req.model, "stream": True},
+                timeout=httpx.Timeout(3600.0, connect=5.0),
+            ) as resp:
+                async for raw in resp.aiter_lines():
+                    if not raw:
+                        continue
+                    try:
+                        chunk = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    yield _sse(chunk)
+        except httpx.RequestError as e:
+            yield _sse({"status": "error", "error": str(e)})
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
