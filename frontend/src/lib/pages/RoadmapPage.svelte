@@ -42,16 +42,18 @@
     {
       title: 'Model warmup button',
       detail:
-        'Models page → click any unloaded model to warm it into VRAM proactively. No-op chat request behind the scenes. Saves the 8-second cold-start TTFT on first real prompt.',
+        'Models page → click any unloaded model to warm it into VRAM proactively. No-op chat request behind the scenes. Cold-start hint is in place; missing the explicit button.',
       size: 'XS'
+    },
+    {
+      title: 'Regenerate / edit / branch on chat messages',
+      detail:
+        'Standard chat affordances. Regenerate is the cheapest win (rerun last assistant message); edit + branch are bigger lifts that touch persistence.',
+      size: 'S'
     }
   ];
 
   const open = [
-    {
-      title: 'Bring back the favicon adaptive contrast',
-      note: 'Current favicon uses prefers-color-scheme so it adapts to OS theme. But on tabs with mid-gray backgrounds (e.g. some terminal browsers) neither variant reads well. Consider a version with a subtle outline.'
-    },
     {
       title: 'Should Octopus speak OpenAI-compatible API too?',
       note: 'Right now backend only proxies Ollama. Could trivially add OpenRouter / Anthropic / OpenAI endpoints — same telemetry instrumentation works for any streamed response. Question: does that dilute the "local lab" positioning?'
@@ -68,32 +70,53 @@
 
   const recentlyShipped = [
     {
-      label: 'Developer governance',
+      label: 'UX overhaul',
       detail:
-        'ESLint · Stylelint · Prettier · svelte-check · Ruff · mypy · pytest-cov (95%) · GitHub Actions · husky · pattern validator banning arbitrary Tailwind hex colors in components. README + LICENSE.'
+        'Markdown rendering for assistant responses (marked + DOMPurify, XSS-tested). Stop button + AbortController. Copy-message hover affordance. Auto-focus chat input on load. 4 clickable example prompts on empty state. Cold-start "warming up…" hint after 2.5s of silence. Errors render inline instead of being silently swallowed.'
     },
     {
-      label: 'Design system page',
+      label: 'Connection banner',
       detail:
-        'Live token gallery, primitives (Button, Card, Section, Tag, StatRow), governance rules. Flips with theme.'
+        'Top-of-page red alert when backend is unreachable. Connection store tracks state across pages; needs 2 consecutive failures to flip "down" so we do not flash on a single hiccup.'
     },
     {
-      label: 'Header + footer + theme toggle',
+      label: 'Models page click → set chat model',
       detail:
-        'Multi-page nav (Chat / Models / System / Design / Settings), light/dark themes with localStorage persistence and OS preference detection.'
+        'New selectedModel store backed by localStorage. Models page cards now actually wire up to chat (was a TODO). Default model also editable from Settings.'
     },
     {
-      label: 'SVG octopus logo + favicon',
-      detail: '8-tentacle logo (asserted in tests), prefers-color-scheme favicon for browser tab.'
+      label: 'System page redo',
+      detail:
+        'Ollama connection card (status, version, url) · Inventory summary (count, total params, disk, VRAM) · Host card (CPU, cores, uptime, memory bar, disk bar) · GPU panel · Loaded-in-VRAM list with live tag. Backend gained /api/ollama and /api/host endpoints (no psutil — pure stdlib parsing /proc).'
+    },
+    {
+      label: 'About page',
+      detail:
+        'Why this exists, full tech-stack table (frontend / backend / infra), governance principles, credits + license. Lives in the footer between Roadmap and the GitHub icon.'
+    },
+    {
+      label: 'Tier 2 governance — actually rock solid now',
+      detail:
+        'Playwright E2E (8 smoke tests, mocked /api so no Ollama needed) · knip dead-code detection · pip-audit + npm audit (caught 2 CVEs on the first run) · Dependabot weekly · branch protection on main. CI now has 3 jobs (Frontend / Backend / E2E) all required.'
+    },
+    {
+      label: 'Tier 1 governance + design system',
+      detail:
+        'ESLint · Stylelint · Prettier · svelte-check · Ruff · mypy · pytest-cov (90%) · husky pre-commit · pattern validator banning arbitrary Tailwind hex in components. Sanctioned UI primitives (Button, Card, Code, Section, Tag, StatRow). Living Design page in both themes.'
+    },
+    {
+      label: 'Multi-page layout + theme system',
+      detail:
+        'Header (Chat / Models / Settings) + footer (System / Design / Roadmap / About / GitHub / theme). Light (cream/ink-black) and dark (black/phosphor-green) with localStorage persistence and OS preference detection. SVG octopus logo (8 tentacles, asserted in tests) + adaptive favicon.'
     },
     {
       label: 'GPU + tokens-per-second telemetry',
       detail:
-        'FastAPI backend streams Ollama with TTFT and tokens/sec from eval_count/eval_duration. nvidia-smi parsed for VRAM bar.'
+        'FastAPI backend streams Ollama with TTFT and tokens/sec from eval_count/eval_duration. nvidia-smi parsed for VRAM bar in chat sidebar and System page.'
     },
     {
       label: 'GitHub repo + CI green',
-      detail: 'Public/private repo synced; CI runs both stacks under a minute on push/PR.'
+      detail: 'Repo synced to seheart/octopus; CI runs all 3 jobs under 90s on every push/PR.'
     }
   ];
 
