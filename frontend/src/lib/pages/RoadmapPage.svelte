@@ -7,6 +7,12 @@
 
   const now = [
     {
+      title: 'Frictionless install — "open it and get it" in 60 seconds',
+      detail:
+        'A non-developer (or a frustrated developer) should be able to go from zero to chatting with a local model in under a minute. One-line install from GitHub (curl|bash or a single docker compose up). Auto-detect Ollama, including the awkward "default port is taken" case. One-command start (./start.sh exists; needs to also seed sensible defaults if Ollama is bare). A landing page that explains what just got installed and what to do first — no scavenger hunt through README. The README itself leads with "60 seconds to first chat", not architecture. This is also a permanent design constraint: every feature added later must preserve the "open it and get it" property. The whole reason Open WebUI failed me was that I — a person who builds software for a living — could not figure it out without a half-hour of fiddling. Octopus must never feel that way. Eight arms, calm and approachable; not enterprise software with a dashboard glued on.',
+      size: 'L'
+    },
+    {
       title: 'Real benchmark integration (Promptfoo)',
       detail:
         'Wire Promptfoo into the backend so each model can be scored against a fixed prompt suite (HumanEval-style for code models, MMLU-lite for general). Results land on the model card with a freshness timestamp.',
