@@ -33,9 +33,9 @@
 </script>
 
 <footer class="border-t border-border bg-surface">
-  <div class="flex items-center justify-between px-4 py-1.5 text-xs font-mono gap-4">
+  <div class="grid grid-cols-3 items-center px-4 py-1.5 text-xs font-mono gap-4">
     <!-- Left: status -->
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 justify-self-start">
       <span class="font-semibold text-accent">octopus v0.1</span>
       <span class="text-muted" aria-hidden="true">|</span>
       <span
@@ -54,7 +54,7 @@
     </div>
 
     <!-- Center: secondary nav -->
-    <nav class="flex items-center gap-3" aria-label="Footer navigation">
+    <nav class="flex items-center gap-3 justify-self-center" aria-label="Footer navigation">
       <button
         onclick={() => go('system')}
         class="bg-transparent border-0 p-0 cursor-pointer transition-colors
@@ -99,7 +99,7 @@
     <!-- Right: theme toggle (icon) -->
     <button
       onclick={toggleTheme}
-      class="text-muted hover:text-accent transition-colors bg-transparent border-0 p-1 cursor-pointer flex items-center"
+      class="text-muted hover:text-accent transition-colors bg-transparent border-0 p-1 cursor-pointer flex items-center justify-self-end"
       title="Switch to {isDark ? 'light' : 'dark'} theme"
       aria-label="Switch to {isDark ? 'light' : 'dark'} theme"
     >
