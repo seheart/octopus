@@ -1,9 +1,8 @@
-@import 'tailwindcss';
+@import url('tailwindcss');
 
 @theme {
   --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, ui-monospace, monospace;
-
+  --font-mono: 'JetBrains Mono', 'SF Mono', consolas, ui-monospace, monospace;
   --color-canvas: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -15,7 +14,6 @@
   --color-success: var(--success);
   --color-error: var(--error);
   --color-warning: var(--warning);
-
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 14px;
@@ -52,7 +50,8 @@ html.dark {
   --warning: #f5b045;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -71,7 +70,20 @@ body {
 }
 
 /* scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}

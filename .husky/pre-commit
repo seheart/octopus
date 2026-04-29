@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Pre-commit: run the design-system pattern check (fast, catches the most
+# common drift). Full lint/type/test runs in CI.
+bash scripts/validate-patterns.sh frontend/src

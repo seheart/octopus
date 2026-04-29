@@ -17,13 +17,13 @@
     <section class="bg-surface border border-border rounded-lg p-5">
       <h2 class="text-sm font-medium text-heading mb-3">Theme</h2>
       <div class="grid grid-cols-2 gap-2">
-        {#each themes as t}
+        {#each themes as t (t.id)}
           <button
             onclick={() => setTheme(t.id)}
             class="text-left p-3 rounded border transition-colors
               {theme.value === t.id
-                ? 'border-accent bg-surface-2'
-                : 'border-border hover:bg-surface-2'}"
+              ? 'border-accent bg-surface-2'
+              : 'border-border hover:bg-surface-2'}"
           >
             <div class="font-mono text-sm text-heading">{t.label}</div>
             <div class="text-xs text-muted mt-0.5">{t.desc}</div>

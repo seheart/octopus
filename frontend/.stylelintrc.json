@@ -1,0 +1,31 @@
+{
+  "extends": ["stylelint-config-standard", "stylelint-config-html/svelte"],
+  "rules": {
+    "color-no-hex": true,
+    "color-named": "never",
+    "no-empty-source": null,
+    "selector-class-pattern": null,
+    "custom-property-pattern": null,
+    "declaration-block-no-redundant-longhand-properties": null,
+    "media-feature-range-notation": null,
+    "color-hex-length": null,
+    "declaration-block-single-line-max-declarations": null,
+    "no-descending-specificity": null,
+    "at-rule-no-unknown": [
+      true,
+      {
+        "ignoreAtRules": ["theme", "tailwind", "apply", "screen", "variants", "responsive"]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/app.css"],
+      "rules": {
+        "color-no-hex": null,
+        "color-named": null
+      }
+    }
+  ],
+  "ignoreFiles": ["dist/**/*", "node_modules/**/*"]
+}

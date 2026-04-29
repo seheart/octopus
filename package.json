@@ -1,0 +1,17 @@
+{
+  "name": "octopus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Ollama model lab — chat with live telemetry",
+  "scripts": {
+    "validate": "npm run validate:frontend && npm run validate:backend && npm run validate:patterns",
+    "validate:frontend": "cd frontend && npm run validate",
+    "validate:backend": "cd backend && ./.venv/bin/ruff check . && ./.venv/bin/ruff format --check . && ./.venv/bin/mypy . && ./.venv/bin/pytest --cov=. --cov-report=term-missing",
+    "validate:patterns": "bash scripts/validate-patterns.sh frontend/src",
+    "fix": "cd frontend && npm run lint:fix && npm run lint:css:fix && npm run format && cd ../backend && ./.venv/bin/ruff check --fix . && ./.venv/bin/ruff format .",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

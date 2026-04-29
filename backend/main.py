@@ -2,7 +2,8 @@ import json
 import os
 import subprocess
 import time
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 from fastapi import FastAPI
@@ -26,19 +27,19 @@ class ChatRequest(BaseModel):
 
 
 @app.get("/api/models")
-async def list_models():
+async def list_models() -> dict[str, Any]:
     r = await client.get("/api/tags")
-    return r.json()
+    return r.json()  # type: ignore[no-any-return]
 
 
 @app.get("/api/loaded")
-async def loaded_models():
+async def loaded_models() -> dict[str, Any]:
     r = await client.get("/api/ps")
-    return r.json()
+    return r.json()  # type: ignore[no-any-return]
 
 
 @app.get("/api/gpu")
-def gpu_stats():
+def gpu_stats() -> dict[str, Any]:
     try:
         out = subprocess.check_output(
             [
@@ -53,7 +54,7 @@ def gpu_stats():
         return {"available": False}
     gpus = []
     for line in out.strip().splitlines():
-        name, used, total, util, temp = [p.strip() for p in line.split(",")]
+        name, used, total, util, temp = (p.strip() for p in line.split(","))
         gpus.append(
             {
                 "name": name,
@@ -67,7 +68,7 @@ def gpu_stats():
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest) -> StreamingResponse:
     async def stream() -> AsyncIterator[bytes]:
         start = time.perf_counter()
         first_token_time: float | None = None
@@ -97,9 +98,7 @@ async def chat(req: ChatRequest):
                     eval_count = chunk.get("eval_count", 0)
                     eval_dur_ns = chunk.get("eval_duration", 1)
                     prompt_count = chunk.get("prompt_eval_count", 0)
-                    tokens_per_sec = (
-                        eval_count / (eval_dur_ns / 1e9) if eval_dur_ns else 0
-                    )
+                    tokens_per_sec = eval_count / (eval_dur_ns / 1e9) if eval_dur_ns else 0
                     yield _sse(
                         {
                             "type": "done",
@@ -113,5 +112,5 @@ async def chat(req: ChatRequest):
     return StreamingResponse(stream(), media_type="text/event-stream")
 
 
-def _sse(payload: dict) -> bytes:
+def _sse(payload: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(payload)}\n\n".encode()

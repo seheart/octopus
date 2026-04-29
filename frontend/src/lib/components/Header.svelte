@@ -1,11 +1,12 @@
 <script>
   import OctoLogo from './OctoLogo.svelte';
-  import { route, go, PAGES } from '../stores/route.svelte.js';
+  import { route, go } from '../stores/route.svelte.js';
 
   const tabs = [
     { id: 'chat', label: 'Chat' },
     { id: 'models', label: 'Models' },
     { id: 'system', label: 'System' },
+    { id: 'design', label: 'Design' },
     { id: 'settings', label: 'Settings' }
   ];
 </script>
@@ -23,14 +24,14 @@
     </button>
 
     <nav class="flex items-center gap-1 ml-4" aria-label="Primary">
-      {#each tabs as tab}
+      {#each tabs as tab (tab.id)}
         <button
           onclick={() => go(tab.id)}
           class="px-3 py-1.5 text-sm rounded transition-colors
             {route.page === tab.id
-              ? 'bg-surface-2 text-heading font-medium'
-              : 'text-muted hover:text-body hover:bg-surface-2'}"
-        >{tab.label}</button>
+            ? 'bg-surface-2 text-heading font-medium'
+            : 'text-muted hover:text-body hover:bg-surface-2'}">{tab.label}</button
+        >
       {/each}
     </nav>
   </div>

@@ -5,6 +5,7 @@
   import ChatPage from './lib/pages/ChatPage.svelte';
   import ModelsPage from './lib/pages/ModelsPage.svelte';
   import SystemPage from './lib/pages/SystemPage.svelte';
+  import DesignPage from './lib/pages/DesignPage.svelte';
   import SettingsPage from './lib/pages/SettingsPage.svelte';
   import { route } from './lib/stores/route.svelte.js';
   import { initTheme } from './lib/stores/theme.svelte.js';
@@ -21,6 +22,8 @@
       <ModelsPage />
     {:else if route.page === 'system'}
       <SystemPage />
+    {:else if route.page === 'design'}
+      <DesignPage />
     {:else if route.page === 'settings'}
       <SettingsPage />
     {/if}

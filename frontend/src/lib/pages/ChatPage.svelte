@@ -24,15 +24,19 @@
   async function loadModels() {
     try {
       const all = await getModels();
-      models = all.filter(m => !m.name.includes('embed'));
+      models = all.filter((m) => !m.name.includes('embed'));
       if (!model && models.length) model = models[0].name;
-    } catch (_) { /* offline */ }
+    } catch (_) {
+      /* offline */
+    }
   }
 
   async function refresh() {
     try {
       [loaded, gpu] = await Promise.all([getLoaded(), getGpu()]);
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   async function send() {
@@ -46,8 +50,8 @@
     scrollToBottom();
 
     const conv = messages
-      .filter(m => m.role !== 'assistant' || m.content)
-      .map(m => ({ role: m.role, content: m.content }));
+      .filter((m) => m.role !== 'assistant' || m.content)
+      .map((m) => ({ role: m.role, content: m.content }));
 
     const resp = await fetch('/api/chat', {
       method: 'POST',
@@ -65,7 +69,7 @@
       const lines = buf.split('\n\n');
       buf = lines.pop();
       for (const block of lines) {
-        const line = block.split('\n').find(l => l.startsWith('data: '));
+        const line = block.split('\n').find((l) => l.startsWith('data: '));
         if (!line) continue;
         const evt = JSON.parse(line.slice(6));
         const last = messages[messages.length - 1];
@@ -113,43 +117,43 @@
 <div class="h-full flex overflow-hidden">
   <!-- Chat panel -->
   <main class="flex-1 flex flex-col overflow-hidden">
-    <div class="px-4 py-2 border-b border-border bg-surface flex items-center justify-between gap-3">
+    <div
+      class="px-4 py-2 border-b border-border bg-surface flex items-center justify-between gap-3"
+    >
       <select
         bind:value={model}
         class="bg-surface-2 text-body border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:border-accent"
       >
-        {#each models as m}
+        {#each models as m (m.name)}
           <option value={m.name}>{m.name} · {fmtParams(m.details?.parameter_size)}</option>
         {/each}
       </select>
       <button
         onclick={clearChat}
         class="text-xs text-muted hover:text-body px-2 py-1 border border-border rounded"
-      >clear</button>
+        >clear</button
+      >
     </div>
 
     <div bind:this={scrollEl} class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
       {#if messages.length === 0}
         <div class="text-muted text-sm h-full flex items-center justify-center">
-          <div class="text-center font-mono">
-            pick a model · ask anything
-          </div>
+          <div class="text-center font-mono">pick a model · ask anything</div>
         </div>
       {/if}
       {#each messages as msg, i (i)}
         <div class="flex flex-col gap-1">
           <div class="text-xs text-muted font-mono uppercase tracking-wide">
-            {msg.role === 'user' ? 'you' : (msg.model || 'assistant')}
+            {msg.role === 'user' ? 'you' : msg.model || 'assistant'}
           </div>
-          <div
-            class="whitespace-pre-wrap text-body"
-            class:text-heading={msg.role === 'user'}
-          >{msg.content}{#if streaming && i === messages.length - 1}<span class="inline-block w-2 h-4 bg-accent animate-pulse ml-0.5"></span>{/if}</div>
+          <div class="whitespace-pre-wrap text-body" class:text-heading={msg.role === 'user'}>
+            {msg.content}{#if streaming && i === messages.length - 1}<span
+                class="inline-block w-2 h-4 bg-accent animate-pulse ml-0.5"
+              ></span>{/if}
+          </div>
           {#if msg.role === 'assistant' && msg.stats?.tokens_per_sec}
             <div class="text-xs text-muted font-mono pt-1">
-              {msg.stats.tokens_per_sec} tok/s
-              · TTFT {msg.stats.ttft_ms}ms
-              · {msg.stats.eval_count} tokens
+              {msg.stats.tokens_per_sec} tok/s · TTFT {msg.stats.ttft_ms}ms · {msg.stats.eval_count} tokens
               · {(msg.stats.total_ms / 1000).toFixed(1)}s
             </div>
           {/if}
@@ -171,21 +175,36 @@
           onclick={send}
           disabled={streaming || !input.trim()}
           class="bg-accent text-canvas font-medium px-4 py-2 rounded text-sm disabled:opacity-40 hover:opacity-90"
-        >{streaming ? '…' : 'send'}</button>
+          >{streaming ? '…' : 'send'}</button
+        >
       </div>
     </div>
   </main>
 
   <!-- Telemetry sidebar -->
-  <aside class="w-80 border-l border-border bg-surface overflow-y-auto p-4 text-sm space-y-5 font-mono">
+  <aside
+    class="w-80 border-l border-border bg-surface overflow-y-auto p-4 text-sm space-y-5 font-mono"
+  >
     <section>
       <h2 class="text-xs uppercase tracking-wider text-muted mb-2">last response</h2>
       {#if liveStat}
         <div class="space-y-1">
-          <div class="flex justify-between"><span class="text-muted">tokens/sec</span><span class="text-accent">{liveStat.tokens_per_sec ?? '–'}</span></div>
-          <div class="flex justify-between"><span class="text-muted">TTFT</span><span>{liveStat.ttft_ms ?? '–'}ms</span></div>
-          <div class="flex justify-between"><span class="text-muted">tokens</span><span>{liveStat.eval_count ?? '–'}</span></div>
-          <div class="flex justify-between"><span class="text-muted">total</span><span>{liveStat.total_ms ? (liveStat.total_ms / 1000).toFixed(1) + 's' : '–'}</span></div>
+          <div class="flex justify-between">
+            <span class="text-muted">tokens/sec</span><span class="text-accent"
+              >{liveStat.tokens_per_sec ?? '–'}</span
+            >
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted">TTFT</span><span>{liveStat.ttft_ms ?? '–'}ms</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted">tokens</span><span>{liveStat.eval_count ?? '–'}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted">total</span><span
+              >{liveStat.total_ms ? (liveStat.total_ms / 1000).toFixed(1) + 's' : '–'}</span
+            >
+          </div>
         </div>
       {:else}
         <div class="text-muted text-xs">no response yet</div>
@@ -198,7 +217,7 @@
         <div class="text-muted text-xs">none</div>
       {:else}
         <div class="space-y-2">
-          {#each loaded as m}
+          {#each loaded as m (m.name)}
             <div class="bg-surface-2 rounded p-2 border border-border">
               <div class="text-body text-xs truncate">{m.name}</div>
               <div class="flex justify-between text-xs text-muted mt-1">
@@ -216,16 +235,21 @@
       {#if !gpu || !gpu.available}
         <div class="text-muted text-xs">not available</div>
       {:else}
-        {#each gpu.gpus as g}
+        {#each gpu.gpus as g (g.name)}
           <div class="space-y-1.5">
             <div class="text-body text-xs truncate">{g.name}</div>
             <div>
               <div class="flex justify-between text-xs mb-0.5">
                 <span class="text-muted">vram</span>
-                <span>{(g.memory_used_mb / 1024).toFixed(1)} / {(g.memory_total_mb / 1024).toFixed(0)} GB</span>
+                <span
+                  >{(g.memory_used_mb / 1024).toFixed(1)} / {(g.memory_total_mb / 1024).toFixed(0)} GB</span
+                >
               </div>
               <div class="h-1.5 bg-surface-2 rounded overflow-hidden">
-                <div class="h-full bg-accent" style="width: {(g.memory_used_mb / g.memory_total_mb * 100).toFixed(1)}%"></div>
+                <div
+                  class="h-full bg-accent"
+                  style="width: {((g.memory_used_mb / g.memory_total_mb) * 100).toFixed(1)}%"
+                ></div>
               </div>
             </div>
             <div>

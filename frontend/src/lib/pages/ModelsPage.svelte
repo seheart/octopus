@@ -18,7 +18,7 @@
   });
 
   function isLoaded(name) {
-    return loaded.some(m => m.name === name);
+    return loaded.some((m) => m.name === name);
   }
 </script>
 
@@ -26,7 +26,9 @@
   <div class="max-w-5xl mx-auto">
     <div class="mb-6">
       <h1 class="text-2xl font-bold text-heading mb-1">Models</h1>
-      <p class="text-sm text-muted">All Ollama models on this machine. Click one to chat with it.</p>
+      <p class="text-sm text-muted">
+        All Ollama models on this machine. Click one to chat with it.
+      </p>
     </div>
 
     {#if loading}
@@ -35,9 +37,11 @@
       <div class="text-error text-sm font-mono">error: {err}</div>
     {:else}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {#each models as m}
+        {#each models as m (m.name)}
           <button
-            onclick={() => { /* TODO: set chat model */ go('chat'); }}
+            onclick={() => {
+              /* TODO: set chat model */ go('chat');
+            }}
             class="text-left bg-surface border border-border rounded-lg p-4 hover:border-accent transition-colors"
           >
             <div class="flex items-start justify-between mb-2 gap-2">
@@ -46,7 +50,10 @@
                 <div class="text-xs text-muted font-mono">{m.details?.family || '—'}</div>
               </div>
               {#if isLoaded(m.name)}
-                <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-2 text-success font-mono">loaded</span>
+                <span
+                  class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-2 text-success font-mono"
+                  >loaded</span
+                >
               {/if}
             </div>
             <div class="grid grid-cols-3 gap-2 text-xs font-mono">
