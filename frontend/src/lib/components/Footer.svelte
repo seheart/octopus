@@ -72,12 +72,15 @@
       >
         Design
       </button>
-      <span class="text-muted" aria-hidden="true">|</span>
+    </nav>
+
+    <!-- Right: GitHub + theme toggle -->
+    <div class="flex items-center gap-2 justify-self-end">
       <a
         href={githubUrl}
         target="_blank"
         rel="noopener noreferrer"
-        class="text-muted hover:text-accent transition-colors no-underline flex items-center"
+        class="text-muted hover:text-accent transition-colors no-underline flex items-center p-1"
         title="GitHub"
         aria-label="View source on GitHub"
       >
@@ -94,56 +97,54 @@
           />
         </svg>
       </a>
-    </nav>
-
-    <!-- Right: theme toggle (icon) -->
-    <button
-      onclick={toggleTheme}
-      class="text-muted hover:text-accent transition-colors bg-transparent border-0 p-1 cursor-pointer flex items-center justify-self-end"
-      title="Switch to {isDark ? 'light' : 'dark'} theme"
-      aria-label="Switch to {isDark ? 'light' : 'dark'} theme"
-    >
-      {#if isDark}
-        <!-- sun -->
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="5" />
-          <line x1="12" y1="1" x2="12" y2="3" />
-          <line x1="12" y1="21" x2="12" y2="23" />
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-          <line x1="1" y1="12" x2="3" y2="12" />
-          <line x1="21" y1="12" x2="23" y2="12" />
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-        </svg>
-      {:else}
-        <!-- moon -->
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-        </svg>
-      {/if}
-    </button>
+      <button
+        onclick={toggleTheme}
+        class="text-muted hover:text-accent transition-colors bg-transparent border-0 p-1 cursor-pointer flex items-center"
+        title="Switch to {isDark ? 'light' : 'dark'} theme"
+        aria-label="Switch to {isDark ? 'light' : 'dark'} theme"
+      >
+        {#if isDark}
+          <!-- sun -->
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        {:else}
+          <!-- moon -->
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        {/if}
+      </button>
+    </div>
   </div>
 </footer>
