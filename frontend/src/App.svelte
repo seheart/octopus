@@ -4,6 +4,7 @@
   import Footer from './lib/components/Footer.svelte';
   import ChatPage from './lib/pages/ChatPage.svelte';
   import ModelsPage from './lib/pages/ModelsPage.svelte';
+  import RoadmapPage from './lib/pages/RoadmapPage.svelte';
   import SystemPage from './lib/pages/SystemPage.svelte';
   import DesignPage from './lib/pages/DesignPage.svelte';
   import SettingsPage from './lib/pages/SettingsPage.svelte';
@@ -20,6 +21,8 @@
       <ChatPage />
     {:else if route.page === 'models'}
       <ModelsPage />
+    {:else if route.page === 'roadmap'}
+      <RoadmapPage />
     {:else if route.page === 'system'}
       <SystemPage />
     {:else if route.page === 'design'}
