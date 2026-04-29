@@ -10,8 +10,9 @@
     ollamaTimeAgo
   } from '../api.js';
   import { go } from '../stores/route.svelte.js';
-  import { setModel, selectedModel } from '../stores/model.svelte.js';
+  import { setModel, selectedModel, setPendingPrompt } from '../stores/model.svelte.js';
   import { Button, Card, Section } from '../components/ui/index.js';
+  import { modelHints } from '../modelHints.js';
 
   let models = $state([]);
   let loaded = $state([]);
@@ -56,6 +57,12 @@
 
   function pickModel(name) {
     setModel(name);
+    go('chat');
+  }
+
+  function tryPrompt(name, prompt) {
+    setModel(name);
+    setPendingPrompt(prompt);
     go('chat');
   }
 
@@ -227,17 +234,18 @@
       {:else}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           {#each models as m (m.name)}
+            {@const hints = modelHints(m)}
             <div
-              class="bg-surface border border-border rounded-lg p-4 hover:border-accent transition-colors group"
+              class="bg-surface border border-border rounded-lg p-4 hover:border-accent transition-colors group flex flex-col"
             >
               <div class="flex items-start justify-between mb-2 gap-2">
                 <button
-                  onclick={() => pickModel(m.name)}
-                  class="text-left flex-1 min-w-0"
+                  onclick={() => hints.chatCapable && pickModel(m.name)}
+                  disabled={!hints.chatCapable}
+                  class="text-left flex-1 min-w-0 disabled:cursor-default"
                   aria-label="Use {m.name} in chat"
                 >
                   <div class="text-heading font-mono text-sm font-medium truncate">{m.name}</div>
-                  <div class="text-xs text-muted font-mono">{m.details?.family || '—'}</div>
                 </button>
                 <div class="flex items-center gap-1.5 shrink-0">
                   {#if isLoaded(m.name)}
@@ -282,10 +290,15 @@
                   {/if}
                 </div>
               </div>
-              <button
-                onclick={() => pickModel(m.name)}
-                class="grid grid-cols-3 gap-2 text-xs font-mono w-full text-left"
-              >
+              <!-- "Best for" — the teaching line, not a label -->
+              <p class="text-sm text-body leading-snug mb-3">
+                <span class="text-muted text-xs font-mono uppercase tracking-wider mr-1"
+                  >best for</span
+                >
+                {hints.bestFor}
+              </p>
+
+              <div class="grid grid-cols-3 gap-2 text-xs font-mono">
                 <div>
                   <div class="text-muted text-[10px] uppercase">params</div>
                   <div class="text-body">{fmtParams(m.details?.parameter_size) || '—'}</div>
@@ -298,9 +311,22 @@
                   <div class="text-muted text-[10px] uppercase">quant</div>
                   <div class="text-body">{m.details?.quantization_level || '—'}</div>
                 </div>
-              </button>
-              <div class="text-xs text-muted font-mono mt-2">
-                modified {ollamaTimeAgo(m.modified_at)}
+              </div>
+
+              <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-border">
+                <div class="text-xs text-muted font-mono">
+                  {m.details?.family || '—'} · modified {ollamaTimeAgo(m.modified_at)}
+                </div>
+                {#if hints.tryPrompt}
+                  <button
+                    onclick={() => tryPrompt(m.name, hints.tryPrompt)}
+                    class="text-xs text-accent hover:underline font-mono shrink-0"
+                    title={hints.tryPrompt}
+                    aria-label="Try this prompt with {m.name}"
+                  >
+                    try this prompt →
+                  </button>
+                {/if}
               </div>
             </div>
           {/each}

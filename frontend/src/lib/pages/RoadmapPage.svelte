@@ -7,6 +7,12 @@
 
   const now = [
     {
+      title: 'Permanent design constraint: Octopus teaches; it never gatekeeps',
+      detail:
+        'Every feature lands with copy that explains what it does and when you would want it. No labels without context. No metrics without an explanation of what they mean for me. No errors without a fix-it hint. The shipped expression of this is the Models page — instead of tagging models "code" / "reasoning" (a category bucket the user has to know how to interpret), each card says "best for X · try: Y." Same data, completely different feel: a label gatekeeps, a sentence with a try-button teaches. Apply this test to anything new: am I labeling, or am I teaching? If a non-developer can read it and immediately know what to do next, it passes. If you have to know what TTFT is, what RAG is, or what a 14B model is, fix the copy. (Permanent — not a discrete task.)',
+      size: '∞'
+    },
+    {
       title: 'Frictionless install — "open it and get it" in 60 seconds',
       detail:
         'A non-developer (or a frustrated developer) should be able to go from zero to chatting with a local model in under a minute. One-line install from GitHub (curl|bash or a single docker compose up). Auto-detect Ollama, including the awkward "default port is taken" case. One-command start (./start.sh exists; needs to also seed sensible defaults if Ollama is bare). A landing page that explains what just got installed and what to do first — no scavenger hunt through README. The README itself leads with "60 seconds to first chat", not architecture. This is also a permanent design constraint: every feature added later must preserve the "open it and get it" property. The whole reason Open WebUI failed me was that I — a person who builds software for a living — could not figure it out without a half-hour of fiddling. Octopus must never feel that way. Eight arms, calm and approachable; not enterprise software with a dashboard glued on.',
@@ -75,6 +81,21 @@
   ];
 
   const recentlyShipped = [
+    {
+      label: 'Models page: "best for" + "try this prompt"',
+      detail:
+        'Every model card now has a teaching line — "best for X · try: Y" — derived from a small heuristic on name + family + size. Try-button seeds the prompt into chat. First concrete expression of the "teach, don\'t gatekeep" constraint. 8 unit tests on the heuristic.'
+    },
+    {
+      label: 'qwen3 / reasoning models fixed',
+      detail:
+        'qwen3:14b silently dropped its chain-of-thought (Ollama streams it into a separate `thinking` field before `content`). Backend now forwards thinking deltas as their own SSE event; chat shows a collapsed "▸ thinking" disclosure plus a "drafting answer…" hint while only thinking has arrived. Caught during a per-model QA pass — all 7 chat models verified.'
+    },
+    {
+      label: 'Model management — pull and delete',
+      detail:
+        'Pull-by-name from the Models page with a live progress bar (Ollama NDJSON → SSE). 6 curated suggestion chips that auto-disable when already installed. Trash icon + 5-second confirm to delete; auto-clears the chat selection if the deleted model was active.'
+    },
     {
       label: 'UX overhaul',
       detail:

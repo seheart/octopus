@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { getModels, getLoaded, getGpu, fmtBytes, fmtParams } from '../api.js';
-  import { selectedModel, setModel } from '../stores/model.svelte.js';
+  import { selectedModel, setModel, consumePendingPrompt } from '../stores/model.svelte.js';
   import { renderMarkdown } from '../markdown.js';
 
   let models = $state([]);
@@ -34,6 +34,9 @@
     await loadModels();
     await refresh();
     pollHandle = setInterval(refresh, 2000);
+    // If we got here from a "Try this prompt" click, seed the input.
+    const seed = consumePendingPrompt();
+    if (seed) input = seed;
     inputEl?.focus();
   });
 
