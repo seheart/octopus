@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>
+    .fg { fill: #000; stroke: #000; }
+    .bg { fill: #fff; }
+    @media (prefers-color-scheme: dark) {
+      .fg { fill: #4ade80; stroke: #4ade80; }
+      .bg { fill: #0a0a0a; }
+    }
+  </style>
+  <path
+    class="fg"
+    d="M32 8c-11 0-19 8-19 19v4c0 3 2 4 4 4h30c2 0 4-1 4-4v-4c0-11-8-19-19-19z"
+  />
+  <circle class="bg" cx="25" cy="22" r="2.5" />
+  <circle class="bg" cx="39" cy="22" r="2.5" />
+  <g class="fg" fill="none" stroke-width="2.6" stroke-linecap="round">
+    <path d="M17 35 Q13 42 16 50 Q19 55 14 60" />
+    <path d="M22 35 Q20 44 24 51 Q26 56 22 60" />
+    <path d="M27 35 Q26 46 28 53 Q29 58 26 61" />
+    <path d="M31 35 Q31 48 30 60" />
+    <path d="M35 35 Q35 48 36 60" />
+    <path d="M39 35 Q40 46 38 53 Q37 58 40 61" />
+    <path d="M44 35 Q46 44 42 51 Q40 56 44 60" />
+    <path d="M49 35 Q53 42 50 50 Q47 55 52 60" />
+  </g>
+</svg>
