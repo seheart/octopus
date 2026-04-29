@@ -9,6 +9,23 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.test.js']
+    include: ['src/**/*.test.js'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/lib/**/*.{js,svelte}'],
+      exclude: [
+        'src/**/*.test.js',
+        'src/**/*.svelte.js',
+        'src/lib/components/ui/**',
+        'src/lib/pages/**'
+      ],
+      thresholds: {
+        lines: 60,
+        functions: 60,
+        branches: 60,
+        statements: 60
+      }
+    }
   }
 });

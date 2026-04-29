@@ -12,6 +12,12 @@ backend/.ruff_cache/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
 
 # Logs
 *.log

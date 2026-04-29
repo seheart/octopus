@@ -1,4 +1,4 @@
-const PAGES = ['chat', 'models', 'roadmap', 'system', 'design', 'settings'];
+const PAGES = ['chat', 'models', 'roadmap', 'system', 'design', 'about', 'settings'];
 
 function read() {
   const hash = location.hash.replace(/^#\/?/, '').split('/')[0];
@@ -18,5 +18,3 @@ if (typeof window !== 'undefined') {
     route.page = read();
   });
 }
-
-export { PAGES };

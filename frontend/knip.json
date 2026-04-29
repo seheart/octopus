@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["src/main.js", "src/App.svelte", "src/lib/pages/*.svelte"],
+  "project": ["src/**/*.{js,svelte}"],
+  "ignoreDependencies": ["@tsconfig/svelte", "tailwindcss"]
+}
