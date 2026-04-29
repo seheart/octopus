@@ -21,22 +21,19 @@
   let pollHandle;
 
   async function refresh() {
-    try {
-      const [l, g, o, h, m] = await Promise.all([
-        getLoaded(),
-        getGpu(),
-        getOllamaInfo(),
-        getHostInfo(),
-        getModels()
-      ]);
-      loaded = l;
-      gpu = g;
-      ollama = o;
-      host = h;
-      allModels = m;
-    } catch (_e) {
-      /* ignore — leave previous values */
-    }
+    // Use allSettled so one 404 doesn't black out every panel.
+    const [l, g, o, h, m] = await Promise.allSettled([
+      getLoaded(),
+      getGpu(),
+      getOllamaInfo(),
+      getHostInfo(),
+      getModels()
+    ]);
+    if (l.status === 'fulfilled') loaded = l.value;
+    if (g.status === 'fulfilled') gpu = g.value;
+    if (o.status === 'fulfilled') ollama = o.value;
+    if (h.status === 'fulfilled') host = h.value;
+    if (m.status === 'fulfilled') allModels = m.value;
   }
 
   onMount(() => {
