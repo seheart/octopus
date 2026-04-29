@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import time
 from collections.abc import AsyncIterator
@@ -36,6 +37,78 @@ async def list_models() -> dict[str, Any]:
 async def loaded_models() -> dict[str, Any]:
     r = await client.get("/api/ps")
     return r.json()  # type: ignore[no-any-return]
+
+
+@app.get("/api/ollama")
+async def ollama_info() -> dict[str, Any]:
+    """Ollama version + connection status."""
+    try:
+        r = await client.get("/api/version", timeout=2.0)
+        version = r.json().get("version") if r.status_code == 200 else None
+        return {
+            "reachable": True,
+            "version": version,
+            "url": OLLAMA_URL,
+        }
+    except (httpx.RequestError, httpx.HTTPStatusError):
+        return {"reachable": False, "version": None, "url": OLLAMA_URL}
+
+
+@app.get("/api/host")
+def host_info() -> dict[str, Any]:
+    """Host system info (CPU, RAM, disk) parsed from /proc + shutil."""
+    info: dict[str, Any] = {}
+
+    # CPU
+    cpu_model = "unknown"
+    cpu_count = os.cpu_count() or 0
+    try:
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.startswith("model name"):
+                    cpu_model = line.split(":", 1)[1].strip()
+                    break
+    except OSError:
+        pass
+    info["cpu"] = {"model": cpu_model, "cores": cpu_count}
+
+    # Memory
+    try:
+        meminfo: dict[str, int] = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                key, _, rest = line.partition(":")
+                value_str = rest.strip().split()[0]
+                meminfo[key.strip()] = int(value_str) * 1024  # kB → bytes
+        total = meminfo.get("MemTotal", 0)
+        available = meminfo.get("MemAvailable", 0)
+        info["memory"] = {
+            "total_bytes": total,
+            "available_bytes": available,
+            "used_bytes": total - available,
+        }
+    except (OSError, ValueError, IndexError):
+        info["memory"] = None
+
+    # Disk (root filesystem)
+    try:
+        usage = shutil.disk_usage("/")
+        info["disk"] = {
+            "total_bytes": usage.total,
+            "used_bytes": usage.used,
+            "free_bytes": usage.free,
+        }
+    except OSError:
+        info["disk"] = None
+
+    # Uptime (best-effort)
+    try:
+        with open("/proc/uptime") as f:
+            info["uptime_seconds"] = float(f.read().split()[0])
+    except (OSError, ValueError):
+        info["uptime_seconds"] = None
+
+    return info
 
 
 @app.get("/api/gpu")

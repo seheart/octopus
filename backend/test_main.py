@@ -53,6 +53,44 @@ def test_loaded_models_proxies_ollama(monkeypatch: pytest.MonkeyPatch, client: T
     assert r.json() == fake
 
 
+def test_ollama_info_when_reachable(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"version": "0.17.4"}
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(return_value=mock_resp)))
+    r = client.get("/api/ollama")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["reachable"] is True
+    assert body["version"] == "0.17.4"
+    assert "url" in body
+
+
+def test_ollama_info_when_unreachable(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
+    import httpx
+
+    def raise_connect_error(*_: Any, **__: Any) -> None:
+        raise httpx.ConnectError("nope")
+
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(side_effect=raise_connect_error)))
+    r = client.get("/api/ollama")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["reachable"] is False
+    assert body["version"] is None
+
+
+def test_host_info_returns_expected_keys(client: TestClient) -> None:
+    r = client.get("/api/host")
+    assert r.status_code == 200
+    body = r.json()
+    assert "cpu" in body
+    assert "memory" in body
+    assert "disk" in body
+    assert "uptime_seconds" in body
+    assert body["cpu"]["cores"] >= 1
+
+
 def test_gpu_endpoint_when_nvidia_smi_missing(
     monkeypatch: pytest.MonkeyPatch, client: TestClient
 ) -> None:

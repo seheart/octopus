@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fmtBytes, fmtParams, ollamaTimeAgo } from './api.js';
+import { fmtBytes, fmtParams, fmtUptime, ollamaTimeAgo } from './api.js';
 
 describe('fmtBytes', () => {
   it('formats GB for >=1GB', () => {
@@ -22,6 +22,22 @@ describe('fmtParams', () => {
   it('handles empty', () => {
     expect(fmtParams('')).toBe('');
     expect(fmtParams(undefined)).toBe('');
+  });
+});
+
+describe('fmtUptime', () => {
+  it('shows days+hours when over a day', () => {
+    expect(fmtUptime(2 * 86400 + 3 * 3600)).toBe('2d 3h');
+  });
+  it('shows hours+minutes for sub-day', () => {
+    expect(fmtUptime(5 * 3600 + 30 * 60)).toBe('5h 30m');
+  });
+  it('shows minutes only for short uptimes', () => {
+    expect(fmtUptime(300)).toBe('5m');
+  });
+  it('returns dash for nullish', () => {
+    expect(fmtUptime(null)).toBe('–');
+    expect(fmtUptime(0)).toBe('–');
   });
 });
 

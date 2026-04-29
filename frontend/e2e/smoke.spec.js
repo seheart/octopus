@@ -64,6 +64,31 @@ test.beforeEach(async ({ page }) => {
       }
     })
   );
+
+  await page.route('**/api/ollama', (route) =>
+    route.fulfill({
+      json: { reachable: true, version: '0.17.4', url: 'http://127.0.0.1:11435' }
+    })
+  );
+
+  await page.route('**/api/host', (route) =>
+    route.fulfill({
+      json: {
+        cpu: { model: 'Intel i7-12700K', cores: 20 },
+        memory: {
+          total_bytes: 64 * 1024 ** 3,
+          available_bytes: 40 * 1024 ** 3,
+          used_bytes: 24 * 1024 ** 3
+        },
+        disk: {
+          total_bytes: 1000 * 1024 ** 3,
+          used_bytes: 600 * 1024 ** 3,
+          free_bytes: 400 * 1024 ** 3
+        },
+        uptime_seconds: 90000
+      }
+    })
+  );
 });
 
 test('chat page loads and shows the model picker', async ({ page }) => {
@@ -95,6 +120,14 @@ test('footer nav routes to System, Design, Roadmap, About', async ({ page }) => 
 
   await page.getByRole('button', { name: 'About page' }).click();
   await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+});
+
+test('system page shows host, ollama, gpu, inventory', async ({ page }) => {
+  await page.goto('/#/system');
+  await expect(page.getByRole('heading', { name: 'System', exact: true })).toBeVisible();
+  await expect(page.getByText('Intel i7-12700K')).toBeVisible();
+  await expect(page.getByText('0.17.4')).toBeVisible();
+  await expect(page.getByText('NVIDIA RTX 5070')).toBeVisible();
 });
 
 test('models page lists available models', async ({ page }) => {
