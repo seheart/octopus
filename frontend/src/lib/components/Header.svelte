@@ -24,6 +24,7 @@
       {#each primaryTabs as tab (tab.id)}
         <button
           onclick={() => go(tab.id)}
+          aria-current={route.page === tab.id ? 'page' : undefined}
           class="px-3 py-1.5 text-sm rounded transition-colors
             {route.page === tab.id
             ? 'bg-surface-2 text-heading font-medium'
@@ -34,6 +35,7 @@
 
     <button
       onclick={() => go('settings')}
+      aria-current={route.page === 'settings' ? 'page' : undefined}
       class="px-3 py-1.5 text-sm rounded transition-colors
         {route.page === 'settings'
         ? 'bg-surface-2 text-heading font-medium'

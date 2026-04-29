@@ -1,98 +1,148 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { getModels, getLoaded, getGpu, fmtBytes, fmtParams } from '../api.js';
+  import { selectedModel, setModel } from '../stores/model.svelte.js';
+  import { renderMarkdown } from '../markdown.js';
 
   let models = $state([]);
-  let model = $state('');
   let messages = $state([]);
   let input = $state('');
   let streaming = $state(false);
   let liveStat = $state(null);
   let loaded = $state([]);
   let gpu = $state(null);
-  let scrollEl;
+  let warmupActive = $state(false);
+  let copyJustCopied = $state(-1);
+  /** @type {AbortController | null} */
+  let currentAbort = null;
+  /** @type {ReturnType<typeof setInterval> | undefined} */
   let pollHandle;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let warmupHandle;
+  let scrollEl;
+  /** @type {HTMLTextAreaElement | undefined} */
+  let inputEl;
+
+  const examplePrompts = [
+    'Explain async/await in JavaScript with a simple example.',
+    'Write a Python function that returns the n-th Fibonacci number, memoized.',
+    'What are three good system prompts for code review?',
+    'Summarize the difference between SQLite WAL and rollback journal modes.'
+  ];
 
   onMount(async () => {
     await loadModels();
     await refresh();
     pollHandle = setInterval(refresh, 2000);
+    inputEl?.focus();
   });
 
-  onDestroy(() => clearInterval(pollHandle));
+  onDestroy(() => {
+    clearInterval(pollHandle);
+    clearTimeout(warmupHandle);
+    currentAbort?.abort();
+  });
 
   async function loadModels() {
     try {
       const all = await getModels();
       models = all.filter((m) => !m.name.includes('embed'));
-      if (!model && models.length) model = models[0].name;
-    } catch (_) {
+      // If a stored selection exists and is still installed, keep it.
+      // Otherwise pick the first available.
+      if (!selectedModel.value || !models.some((m) => m.name === selectedModel.value)) {
+        if (models.length) setModel(models[0].name);
+      }
+    } catch (_e) {
       /* offline */
     }
   }
 
   async function refresh() {
-    try {
-      [loaded, gpu] = await Promise.all([getLoaded(), getGpu()]);
-    } catch (_) {
-      /* ignore */
-    }
+    const [l, g] = await Promise.allSettled([getLoaded(), getGpu()]);
+    if (l.status === 'fulfilled') loaded = l.value;
+    if (g.status === 'fulfilled') gpu = g.value;
   }
 
-  async function send() {
-    if (!input.trim() || streaming || !model) return;
-    const userMsg = { role: 'user', content: input.trim() };
-    const asstMsg = { role: 'assistant', content: '', model, stats: {} };
+  async function send(prompt = input) {
+    if (!prompt.trim() || streaming || !selectedModel.value) return;
+    const userMsg = { role: 'user', content: prompt.trim() };
+    const asstMsg = { role: 'assistant', content: '', model: selectedModel.value, stats: {} };
     messages = [...messages, userMsg, asstMsg];
     input = '';
     streaming = true;
     liveStat = null;
+    warmupActive = false;
     scrollToBottom();
+
+    // Show "warming up" hint if no token after 2.5s.
+    warmupHandle = setTimeout(() => {
+      if (streaming && !messages[messages.length - 1].content) warmupActive = true;
+    }, 2500);
 
     const conv = messages
       .filter((m) => m.role !== 'assistant' || m.content)
       .map((m) => ({ role: m.role, content: m.content }));
 
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, messages: conv })
-    });
+    currentAbort = new AbortController();
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split('\n\n');
-      buf = lines.pop();
-      for (const block of lines) {
-        const line = block.split('\n').find((l) => l.startsWith('data: '));
-        if (!line) continue;
-        const evt = JSON.parse(line.slice(6));
-        const last = messages[messages.length - 1];
-        if (evt.type === 'token') {
-          last.content += evt.content;
-          messages = [...messages.slice(0, -1), last];
-          scrollToBottom();
-        } else if (evt.type === 'ttft') {
-          liveStat = { ...(liveStat || {}), ttft_ms: evt.ms };
-        } else if (evt.type === 'done') {
-          last.stats = {
-            ttft_ms: liveStat?.ttft_ms,
-            tokens_per_sec: evt.tokens_per_sec,
-            eval_count: evt.eval_count,
-            total_ms: evt.total_ms
-          };
-          messages = [...messages.slice(0, -1), last];
-          liveStat = last.stats;
+    try {
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: selectedModel.value, messages: conv }),
+        signal: currentAbort.signal
+      });
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n\n');
+        buf = lines.pop();
+        for (const block of lines) {
+          const line = block.split('\n').find((l) => l.startsWith('data: '));
+          if (!line) continue;
+          const evt = JSON.parse(line.slice(6));
+          const last = messages[messages.length - 1];
+          if (evt.type === 'token') {
+            last.content += evt.content;
+            messages = [...messages.slice(0, -1), last];
+            warmupActive = false;
+            scrollToBottom();
+          } else if (evt.type === 'ttft') {
+            liveStat = { ...(liveStat || {}), ttft_ms: evt.ms };
+          } else if (evt.type === 'done') {
+            last.stats = {
+              ttft_ms: liveStat?.ttft_ms,
+              tokens_per_sec: evt.tokens_per_sec,
+              eval_count: evt.eval_count,
+              total_ms: evt.total_ms
+            };
+            messages = [...messages.slice(0, -1), last];
+            liveStat = last.stats;
+          }
         }
       }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        const last = messages[messages.length - 1];
+        last.content = (last.content || '') + `\n\n_Error: ${err.message}_`;
+        messages = [...messages.slice(0, -1), last];
+      }
+    } finally {
+      streaming = false;
+      warmupActive = false;
+      currentAbort = null;
+      clearTimeout(warmupHandle);
+      refresh();
     }
-    streaming = false;
-    refresh();
+  }
+
+  function stop() {
+    currentAbort?.abort();
   }
 
   function onKey(e) {
@@ -112,6 +162,23 @@
     messages = [];
     liveStat = null;
   }
+
+  async function copyMessage(content, idx) {
+    try {
+      await navigator.clipboard.writeText(content);
+      copyJustCopied = idx;
+      setTimeout(() => {
+        if (copyJustCopied === idx) copyJustCopied = -1;
+      }, 1500);
+    } catch (_e) {
+      /* ignore */
+    }
+  }
+
+  function useExample(text) {
+    input = text;
+    inputEl?.focus();
+  }
 </script>
 
 <div class="h-full flex overflow-hidden">
@@ -121,8 +188,9 @@
       class="px-4 py-2 border-b border-border bg-surface flex items-center justify-between gap-3"
     >
       <select
-        bind:value={model}
-        class="bg-surface-2 text-body border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:border-accent"
+        value={selectedModel.value}
+        onchange={(e) => setModel(e.currentTarget.value)}
+        class="bg-surface-2 text-body border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:border-accent max-w-md"
       >
         {#each models as m (m.name)}
           <option value={m.name}>{m.name} · {fmtParams(m.details?.parameter_size)}</option>
@@ -130,27 +198,67 @@
       </select>
       <button
         onclick={clearChat}
-        class="text-xs text-muted hover:text-body px-2 py-1 border border-border rounded"
-        >clear</button
+        disabled={messages.length === 0 || streaming}
+        class="text-xs text-muted hover:text-body px-2 py-1 border border-border rounded disabled:opacity-40 disabled:cursor-not-allowed"
       >
+        clear
+      </button>
     </div>
 
     <div bind:this={scrollEl} class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
       {#if messages.length === 0}
-        <div class="text-muted text-sm h-full flex items-center justify-center">
-          <div class="text-center font-mono">pick a model · ask anything</div>
+        <div class="h-full flex items-center justify-center">
+          <div class="max-w-md w-full text-center space-y-5">
+            <div class="text-muted font-mono text-sm">pick a model · ask anything</div>
+            <div class="space-y-2 text-left">
+              <div class="text-xs text-muted font-mono uppercase tracking-wider mb-1">
+                try one of these
+              </div>
+              {#each examplePrompts as p (p)}
+                <button
+                  onclick={() => useExample(p)}
+                  class="block w-full text-left text-sm bg-surface border border-border rounded p-2.5 hover:border-accent hover:bg-surface-2 transition-colors text-body"
+                >
+                  {p}
+                </button>
+              {/each}
+            </div>
+          </div>
         </div>
       {/if}
+
       {#each messages as msg, i (i)}
-        <div class="flex flex-col gap-1">
-          <div class="text-xs text-muted font-mono uppercase tracking-wide">
-            {msg.role === 'user' ? 'you' : msg.model || 'assistant'}
+        <div class="flex flex-col gap-1 group">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-muted font-mono uppercase tracking-wide">
+              {msg.role === 'user' ? 'you' : msg.model || 'assistant'}
+            </div>
+            {#if msg.role === 'assistant' && msg.content}
+              <button
+                onclick={() => copyMessage(msg.content, i)}
+                class="opacity-0 group-hover:opacity-100 text-xs text-muted hover:text-accent font-mono transition-opacity"
+                aria-label="Copy message"
+              >
+                {copyJustCopied === i ? '✓ copied' : 'copy'}
+              </button>
+            {/if}
           </div>
-          <div class="whitespace-pre-wrap text-body" class:text-heading={msg.role === 'user'}>
-            {msg.content}{#if streaming && i === messages.length - 1}<span
-                class="inline-block w-2 h-4 bg-accent animate-pulse ml-0.5"
-              ></span>{/if}
-          </div>
+          {#if msg.role === 'assistant'}
+            <div class="markdown-body text-body">
+              {#if msg.content}
+                <!-- eslint-disable-next-line svelte/no-at-html-tags — DOMPurify-sanitized in markdown.js -->
+                {@html renderMarkdown(msg.content)}
+              {:else if streaming && i === messages.length - 1 && warmupActive}
+                <span class="text-muted italic"
+                  >warming up {msg.model} into VRAM (cold-start can take ~10s)…</span
+                >
+              {/if}{#if streaming && i === messages.length - 1}<span
+                  class="inline-block w-2 h-4 bg-accent animate-pulse ml-0.5 align-middle"
+                ></span>{/if}
+            </div>
+          {:else}
+            <div class="whitespace-pre-wrap text-heading">{msg.content}</div>
+          {/if}
           {#if msg.role === 'assistant' && msg.stats?.tokens_per_sec}
             <div class="text-xs text-muted font-mono pt-1">
               {msg.stats.tokens_per_sec} tok/s · TTFT {msg.stats.ttft_ms}ms · {msg.stats.eval_count} tokens
@@ -164,26 +272,38 @@
     <div class="border-t border-border bg-surface px-4 py-3">
       <div class="flex gap-2 items-end">
         <textarea
+          bind:this={inputEl}
           bind:value={input}
           onkeydown={onKey}
-          placeholder="message {model || '…'}"
+          placeholder="message {selectedModel.value || '…'}"
           rows="2"
           class="flex-1 bg-surface-2 border border-border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-accent text-body"
           disabled={streaming}
         ></textarea>
-        <button
-          onclick={send}
-          disabled={streaming || !input.trim()}
-          class="bg-accent text-canvas font-medium px-4 py-2 rounded text-sm disabled:opacity-40 hover:opacity-90"
-          >{streaming ? '…' : 'send'}</button
-        >
+        {#if streaming}
+          <button
+            onclick={stop}
+            class="bg-error text-canvas font-medium px-4 py-2 rounded text-sm hover:opacity-90"
+            aria-label="Stop generation"
+          >
+            stop
+          </button>
+        {:else}
+          <button
+            onclick={() => send()}
+            disabled={!input.trim()}
+            class="bg-accent text-canvas font-medium px-4 py-2 rounded text-sm disabled:opacity-40 hover:opacity-90"
+          >
+            send
+          </button>
+        {/if}
       </div>
     </div>
   </main>
 
   <!-- Telemetry sidebar -->
   <aside
-    class="w-80 border-l border-border bg-surface overflow-y-auto p-4 text-sm space-y-5 font-mono"
+    class="w-80 border-l border-border bg-surface overflow-y-auto p-4 text-sm space-y-5 font-mono hidden lg:block"
   >
     <section>
       <h2 class="text-xs uppercase tracking-wider text-muted mb-2">last response</h2>

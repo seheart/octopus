@@ -1,10 +1,10 @@
 <script>
   import { theme, toggleTheme } from '../stores/theme.svelte.js';
   import { route, go } from '../stores/route.svelte.js';
+  import { connection, markOk, markFail } from '../stores/connection.svelte.js';
   import { onMount, onDestroy } from 'svelte';
   import { getModels } from '../api.js';
 
-  let connected = $state(false);
   let modelCount = $state(0);
   /** @type {ReturnType<typeof setInterval> | undefined} */
   let pollHandle;
@@ -12,12 +12,14 @@
   async function check() {
     try {
       const m = await getModels();
-      connected = true;
       modelCount = m.length;
+      markOk();
     } catch (_e) {
-      connected = false;
+      markFail();
     }
   }
+
+  const connected = $derived(connection.ok);
 
   onMount(() => {
     check();
@@ -36,8 +38,8 @@
   <div class="grid grid-cols-3 items-center px-4 py-1.5 text-xs font-mono gap-4">
     <!-- Left: status -->
     <div class="flex items-center gap-3 justify-self-start">
-      <span class="font-semibold text-accent">octopus v0.1</span>
-      <span class="text-muted" aria-hidden="true">|</span>
+      <span class="font-semibold text-accent hidden sm:inline">octopus v0.1</span>
+      <span class="text-muted hidden sm:inline" aria-hidden="true">|</span>
       <span
         class="flex items-center gap-1.5"
         title={connected ? 'Ollama connected' : 'Ollama unreachable'}
@@ -49,8 +51,8 @@
         ></span>
         <span class="text-muted">ollama</span>
       </span>
-      <span class="text-muted" aria-hidden="true">|</span>
-      <span class="text-muted">{modelCount} models</span>
+      <span class="text-muted hidden md:inline" aria-hidden="true">|</span>
+      <span class="text-muted hidden md:inline">{modelCount} models</span>
     </div>
 
     <!-- Center: secondary nav -->

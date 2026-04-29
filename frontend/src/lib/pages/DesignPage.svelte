@@ -1,5 +1,5 @@
 <script>
-  import { Button, Card, Section, Tag, StatRow } from '../components/ui/index.js';
+  import { Button, Card, Code, Section, Tag, StatRow } from '../components/ui/index.js';
   import { theme, setTheme } from '../stores/theme.svelte.js';
 
   const colorTokens = [
@@ -109,6 +109,17 @@
       </Section>
     </Card>
 
+    <!-- Code -->
+    <Card padding="lg">
+      <Section title="inline code">
+        <p class="text-sm text-body">
+          For inline references like <Code>npm run validate</Code> or
+          <Code>src/app.css</Code> use the
+          <Code>Code</Code> primitive — never paste-shape the styling.
+        </p>
+      </Section>
+    </Card>
+
     <!-- Tags -->
     <Card padding="lg">
       <Section title="tags">
@@ -139,30 +150,20 @@
         <ul class="text-sm text-body space-y-1.5 list-disc pl-5">
           <li>
             Color hex values are <strong>only</strong> declared in
-            <code class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded">src/app.css</code>
-            (the token file).
+            <Code>src/app.css</Code> (the token file).
           </li>
           <li>
-            Components use semantic Tailwind utilities (<code
-              class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded">bg-surface</code
-            >,
-            <code class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded">text-heading</code>) or
-            <code class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded">var(--accent)</code>
-            — never arbitrary Tailwind color values (the
-            <code class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded">bg-</code> + bracketed-hex
-            form).
+            Components use semantic Tailwind utilities (<Code>bg-surface</Code>,
+            <Code>text-heading</Code>) or <Code>var(--accent)</Code> — never arbitrary Tailwind color
+            values (the <Code>bg-</Code> + bracketed-hex form).
           </li>
           <li>
             New buttons / cards / inputs use the primitives in
-            <code class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded"
-              >lib/components/ui/</code
-            >. If a primitive is missing, add it here first.
+            <Code>lib/components/ui/</Code>. If a primitive is missing, add it here first.
           </li>
           <li>
             Pre-commit + CI enforce these via stylelint, eslint, and
-            <code class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded"
-              >scripts/validate-patterns.sh</code
-            >.
+            <Code>scripts/validate-patterns.sh</Code>.
           </li>
         </ul>
       </Section>

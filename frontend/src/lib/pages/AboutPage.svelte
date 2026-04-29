@@ -1,5 +1,5 @@
 <script>
-  import { Card, Section } from '../components/ui/index.js';
+  import { Card, Code, Section } from '../components/ui/index.js';
 
   const tools = {
     frontend: [
@@ -72,12 +72,8 @@
     <Card padding="lg">
       <Section title="why this exists">
         <p class="text-sm text-body leading-relaxed mb-2">
-          Open WebUI and LM Studio cover chat. <code
-            class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded">ollama ps</code
-          >
-          and
-          <code class="font-mono text-xs bg-surface-2 px-1 py-0.5 rounded">nvidia-smi</code> cover stats.
-          Promptfoo covers benchmarks. Nothing covers all three in one window.
+          Open WebUI and LM Studio cover chat. <Code>ollama ps</Code> and <Code>nvidia-smi</Code> cover
+          stats. Promptfoo covers benchmarks. Nothing covers all three in one window.
         </p>
         <p class="text-sm text-body leading-relaxed">
           The eight tentacles fit: each "arm" runs a different model, the central UI coordinates the

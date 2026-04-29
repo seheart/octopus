@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Header from './lib/components/Header.svelte';
   import Footer from './lib/components/Footer.svelte';
+  import Banner from './lib/components/Banner.svelte';
   import ChatPage from './lib/pages/ChatPage.svelte';
   import ModelsPage from './lib/pages/ModelsPage.svelte';
   import RoadmapPage from './lib/pages/RoadmapPage.svelte';
@@ -16,6 +17,7 @@
 </script>
 
 <div class="h-screen flex flex-col bg-canvas text-body font-sans">
+  <Banner />
   <Header />
   <div class="flex-1 overflow-hidden">
     {#if route.page === 'chat'}

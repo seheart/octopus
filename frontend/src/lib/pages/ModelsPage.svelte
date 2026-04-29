@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { getModels, getLoaded, fmtBytes, fmtParams, ollamaTimeAgo } from '../api.js';
   import { go } from '../stores/route.svelte.js';
+  import { setModel } from '../stores/model.svelte.js';
 
   let models = $state([]);
   let loaded = $state([]);
@@ -40,7 +41,8 @@
         {#each models as m (m.name)}
           <button
             onclick={() => {
-              /* TODO: set chat model */ go('chat');
+              setModel(m.name);
+              go('chat');
             }}
             class="text-left bg-surface border border-border rounded-lg p-4 hover:border-accent transition-colors"
           >
