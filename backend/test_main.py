@@ -102,6 +102,34 @@ def test_delete_model_failure_propagates_status(
     assert r.status_code == 404
 
 
+def test_unload_model_success(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    post_mock = AsyncMock(return_value=mock_resp)
+    monkeypatch.setattr(main, "client", MagicMock(post=post_mock))
+    r = client.post("/api/models/qwen3:14b/unload")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["unloaded"] is True
+    assert body["model"] == "qwen3:14b"
+    # Confirm we used the documented keep_alive=0 unload idiom on /api/generate
+    post_mock.assert_awaited_once()
+    args, kwargs = post_mock.call_args
+    assert args[0] == "/api/generate"
+    assert kwargs["json"] == {"model": "qwen3:14b", "keep_alive": 0}
+
+
+def test_unload_model_failure_propagates_status(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 404
+    mock_resp.text = "model not found"
+    monkeypatch.setattr(main, "client", MagicMock(post=AsyncMock(return_value=mock_resp)))
+    r = client.post("/api/models/nonexistent:latest/unload")
+    assert r.status_code == 404
+
+
 def test_pull_streams_progress_events(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
     chunks = [
         json.dumps({"status": "pulling manifest"}),

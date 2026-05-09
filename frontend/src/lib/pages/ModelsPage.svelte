@@ -4,14 +4,14 @@
     getModels,
     getLoaded,
     deleteModel,
-    pullModel,
+    unloadModel,
     fmtBytes,
     fmtParams,
     ollamaTimeAgo
   } from '../api.js';
   import { go } from '../stores/route.svelte.js';
   import { setModel, selectedModel, setPendingPrompt } from '../stores/model.svelte.js';
-  import { Button, Card, Section } from '../components/ui/index.js';
+  import { Card } from '../components/ui/index.js';
   import { modelHints } from '../modelHints.js';
 
   let models = $state([]);
@@ -19,25 +19,11 @@
   let loading = $state(true);
   let err = $state(null);
 
-  // Pull state
-  let pullName = $state('');
-  let pulling = $state(false);
-  let pullStatus = $state('');
-  let pullPct = $state(null);
-  let pullError = $state(null);
-  let currentPull = $state(null);
-
   // Delete confirmation per-model name
   let confirmingDelete = $state('');
 
-  const suggestions = [
-    { name: 'llama3.2:3b', desc: 'small, fast general' },
-    { name: 'phi4', desc: 'modern 14B from MS' },
-    { name: 'mistral:7b', desc: 'classic, reliable' },
-    { name: 'deepseek-r1:14b', desc: 'reasoning' },
-    { name: 'qwen3:8b', desc: 'smaller qwen3' },
-    { name: 'nomic-embed-text', desc: 'embeddings (RAG)' }
-  ];
+  // Tracks which model is currently being unloaded (so we can show "stopping…")
+  let unloadingName = $state('');
 
   async function refresh() {
     try {
@@ -66,51 +52,17 @@
     go('chat');
   }
 
-  async function startPull(name = pullName) {
-    const target = name.trim();
-    if (!target || pulling) return;
-    pulling = true;
-    pullStatus = 'starting…';
-    pullPct = null;
-    pullError = null;
-    pullName = target;
-
+  async function unload(name) {
+    if (unloadingName) return;
+    unloadingName = name;
     try {
-      currentPull = pullModel(target, (evt) => {
-        if (evt.status === 'error') {
-          pullError = evt.error || 'pull failed';
-          return;
-        }
-        pullStatus = evt.status;
-        if (evt.total && evt.completed !== null && evt.completed !== undefined) {
-          pullPct = Math.min(100, (evt.completed / evt.total) * 100);
-        }
-      });
-      await currentPull.done;
-      if (!pullError) {
-        pullStatus = 'done';
-        pullName = '';
-        await refresh();
-        // If no model is currently selected, pick the one we just pulled
-        if (!selectedModel.value) setModel(target);
-      }
+      await unloadModel(name);
+      await refresh();
     } catch (e) {
-      if (e.name !== 'AbortError') pullError = e.message;
+      err = e.message;
     } finally {
-      pulling = false;
-      currentPull = null;
-      // Clear status after a beat so it doesn't linger
-      setTimeout(() => {
-        if (!pulling) {
-          pullStatus = '';
-          pullPct = null;
-        }
-      }, 2000);
+      unloadingName = '';
     }
-  }
-
-  function cancelPull() {
-    currentPull?.abort();
   }
 
   async function confirmDelete(name) {
@@ -133,87 +85,24 @@
       confirmingDelete = '';
     }
   }
-
-  function onPullKey(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      startPull();
-    }
-  }
 </script>
 
 <div class="h-full overflow-y-auto px-6 py-6">
   <div class="max-w-5xl mx-auto space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold text-heading mb-1">Models</h1>
-      <p class="text-sm text-muted">
-        All Ollama models on this machine. Click a card to chat with it. Pull new ones below.
-      </p>
+    <div class="flex items-end justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-heading mb-1">Models</h1>
+        <p class="text-sm text-muted">
+          All Ollama models on this machine. Click a card to chat with it.
+        </p>
+      </div>
+      <button
+        onclick={() => go('pull')}
+        class="text-sm font-mono px-3 py-1.5 bg-surface-2 border border-border rounded hover:border-accent hover:text-accent transition-colors text-body shrink-0"
+      >
+        + Add a model
+      </button>
     </div>
-
-    <!-- Pull section -->
-    <Card padding="lg">
-      <Section title="add a model">
-        <div class="flex gap-2 items-center mb-3">
-          <input
-            type="text"
-            bind:value={pullName}
-            onkeydown={onPullKey}
-            placeholder="model name (e.g. qwen3:8b, llama3.2:3b)"
-            disabled={pulling}
-            class="flex-1 bg-surface-2 border border-border rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-accent text-body disabled:opacity-50"
-          />
-          {#if pulling}
-            <Button variant="secondary" onclick={cancelPull}>cancel</Button>
-          {:else}
-            <Button variant="primary" onclick={() => startPull()} disabled={!pullName.trim()}>
-              pull
-            </Button>
-          {/if}
-        </div>
-
-        {#if pulling || pullError || pullStatus === 'done'}
-          <div class="bg-surface-2 border border-border rounded p-3 mb-3 font-mono text-xs">
-            <div class="flex justify-between mb-1">
-              <span class="text-body">{pullName || '—'}</span>
-              <span class="text-muted">
-                {#if pullError}
-                  <span class="text-error">{pullError}</span>
-                {:else}
-                  {pullStatus}
-                  {#if pullPct !== null}
-                    · {pullPct.toFixed(1)}%
-                  {/if}
-                {/if}
-              </span>
-            </div>
-            {#if pullPct !== null && !pullError}
-              <div class="h-1.5 bg-canvas rounded overflow-hidden">
-                <div class="h-full bg-accent transition-all" style="width: {pullPct}%"></div>
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        <div class="text-xs text-muted font-mono uppercase tracking-wider mb-2">
-          popular suggestions
-        </div>
-        <div class="flex flex-wrap gap-1.5">
-          {#each suggestions as s (s.name)}
-            <button
-              onclick={() => startPull(s.name)}
-              disabled={pulling ||
-                models.some((m) => m.name === s.name || m.name.startsWith(s.name + ':'))}
-              title={s.desc}
-              class="text-xs font-mono px-2 py-1 bg-surface-2 border border-border rounded hover:border-accent hover:text-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-body"
-            >
-              {s.name}
-              <span class="text-muted">· {s.desc}</span>
-            </button>
-          {/each}
-        </div>
-      </Section>
-    </Card>
 
     <!-- Installed -->
     <div>
@@ -227,16 +116,25 @@
         <div class="text-error text-sm font-mono">error: {err}</div>
       {:else if models.length === 0}
         <Card>
-          <div class="text-center text-muted text-sm py-4">
-            No models installed yet. Try one of the suggestions above to get started.
+          <div class="text-center text-sm py-6 space-y-2">
+            <div class="text-muted">No models installed yet.</div>
+            <button
+              onclick={() => go('pull')}
+              class="text-accent hover:underline font-mono text-sm"
+            >
+              Add a model →
+            </button>
           </div>
         </Card>
       {:else}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           {#each models as m (m.name)}
             {@const hints = modelHints(m)}
+            {@const loadedNow = isLoaded(m.name)}
             <div
-              class="bg-surface border border-border rounded-lg p-4 hover:border-accent transition-colors group flex flex-col"
+              class="border rounded-lg p-4 transition-colors group flex flex-col {loadedNow
+                ? 'bg-success/15 border-success/60 hover:border-success'
+                : 'bg-surface border-border hover:border-accent'}"
             >
               <div class="flex items-start justify-between mb-2 gap-2">
                 <button
@@ -249,11 +147,20 @@
                 </button>
                 <div class="flex items-center gap-1.5 shrink-0">
                   {#if isLoaded(m.name)}
-                    <span
-                      class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-2 text-success font-mono"
+                    <button
+                      onclick={() => unload(m.name)}
+                      disabled={unloadingName === m.name}
+                      title="Unload {m.name} from memory (model stays installed)"
+                      aria-label="Unload {m.name} from memory"
+                      class="group/loaded text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-2 text-success font-mono hover:bg-error hover:text-canvas transition-colors disabled:opacity-60"
                     >
-                      loaded
-                    </span>
+                      {#if unloadingName === m.name}
+                        stopping…
+                      {:else}
+                        <span class="group-hover/loaded:hidden">loaded</span>
+                        <span class="hidden group-hover/loaded:inline">stop</span>
+                      {/if}
+                    </button>
                   {/if}
                   {#if confirmingDelete === m.name}
                     <button

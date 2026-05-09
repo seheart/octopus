@@ -15,7 +15,7 @@ Local Ollama model lab — chat alongside live telemetry (tokens/sec, TTFT, GPU/
 
 ## Stack
 
-- **Backend**: FastAPI on `:8800`, streams Ollama (`127.0.0.1:11435`)
+- **Backend**: FastAPI on `:8800`, streams Ollama (`127.0.0.1:11434`)
 - **Frontend**: Svelte 5 + Vite + Tailwind 4 on `:8801`
 - **Pages**: Chat, Models, System, Design, Settings
 - **Theme**: light (cream/ink-black) and dark (black/phosphor-green), persisted to localStorage
@@ -122,10 +122,10 @@ octopus/
 
 ## Ollama on a non-default port
 
-This machine runs Ollama on `127.0.0.1:11435` (the default `11434` is occupied by another service). To override, set `OLLAMA_URL`:
+Defaults to `127.0.0.1:11434` (Ollama's standard port). Override with `OLLAMA_URL`:
 
 ```bash
-OLLAMA_URL=http://127.0.0.1:11434 ./start.sh
+OLLAMA_URL=http://127.0.0.1:11435 ./start.sh
 ```
 
 ## License

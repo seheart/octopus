@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11435")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 
 app = FastAPI(title="Octopus")
 client = httpx.AsyncClient(base_url=OLLAMA_URL, timeout=httpx.Timeout(600.0, connect=5.0))
@@ -211,6 +211,24 @@ async def delete_model(name: str) -> dict[str, Any]:
             detail=f"Ollama returned {r.status_code}: {r.text}",
         )
     return {"deleted": True, "model": name}
+
+
+@app.post("/api/models/{name:path}/unload")
+async def unload_model(name: str) -> dict[str, Any]:
+    """Evict a model from memory without deleting it.
+
+    Uses Ollama's documented `keep_alive: 0` idiom — a no-op generate request
+    that tells the runtime to release the model immediately.
+    """
+    r = await client.post("/api/generate", json={"model": name, "keep_alive": 0})
+    if r.status_code != 200:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=r.status_code,
+            detail=f"Ollama returned {r.status_code}: {r.text}",
+        )
+    return {"unloaded": True, "model": name}
 
 
 @app.post("/api/pull")

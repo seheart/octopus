@@ -37,6 +37,15 @@ export async function deleteModel(name) {
   return await r.json();
 }
 
+export async function unloadModel(name) {
+  const r = await fetch(`/api/models/${encodeURIComponent(name)}/unload`, { method: 'POST' });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`unload failed (${r.status}): ${body}`);
+  }
+  return await r.json();
+}
+
 /**
  * Stream a model pull. Calls onEvent for each NDJSON event Ollama emits.
  * Returns { done, abort } — await done; call abort to cancel.

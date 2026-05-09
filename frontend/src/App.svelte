@@ -5,6 +5,7 @@
   import Banner from './lib/components/Banner.svelte';
   import ChatPage from './lib/pages/ChatPage.svelte';
   import ModelsPage from './lib/pages/ModelsPage.svelte';
+  import PullPage from './lib/pages/PullPage.svelte';
   import RoadmapPage from './lib/pages/RoadmapPage.svelte';
   import SystemPage from './lib/pages/SystemPage.svelte';
   import DesignPage from './lib/pages/DesignPage.svelte';
@@ -24,6 +25,8 @@
       <ChatPage />
     {:else if route.page === 'models'}
       <ModelsPage />
+    {:else if route.page === 'pull'}
+      <PullPage />
     {:else if route.page === 'roadmap'}
       <RoadmapPage />
     {:else if route.page === 'system'}

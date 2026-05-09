@@ -76,7 +76,7 @@
     },
     {
       title: 'Multi-host: connect to remote Ollama',
-      note: 'Backend hardcodes 127.0.0.1:11435 (overridable via OLLAMA_URL). Could become "saved connections" so you can flip between dev box, gaming rig, and a Mac mini. Tradeoff: settings sprawl.'
+      note: 'Backend hardcodes 127.0.0.1:11434 (overridable via OLLAMA_URL). Could become "saved connections" so you can flip between dev box, gaming rig, and a Mac mini. Tradeoff: settings sprawl.'
     }
   ];
 

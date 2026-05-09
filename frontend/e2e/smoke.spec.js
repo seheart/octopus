@@ -67,7 +67,7 @@ test.beforeEach(async ({ page }) => {
 
   await page.route('**/api/ollama', (route) =>
     route.fulfill({
-      json: { reachable: true, version: '0.17.4', url: 'http://127.0.0.1:11435' }
+      json: { reachable: true, version: '0.17.4', url: 'http://127.0.0.1:11434' }
     })
   );
 
