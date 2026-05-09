@@ -155,7 +155,7 @@
           </div>
         </Card>
       {:else}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
           {#each models as m (m.name)}
             {@const hints = modelHints(m)}
             {@const loadedNow = isLoaded(m.name)}

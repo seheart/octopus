@@ -101,24 +101,39 @@ test('chat page loads and shows the model picker', async ({ page }) => {
 test('header has Chat and Models tabs and a Settings link', async ({ page }) => {
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Primary' });
-  await expect(nav.getByRole('button', { name: 'Chat' })).toBeVisible();
-  await expect(nav.getByRole('button', { name: 'Models' })).toBeVisible();
+  await expect(nav.getByRole('button', { name: 'chat', exact: true })).toBeVisible();
+  await expect(nav.getByRole('button', { name: 'models', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Settings' })).toBeVisible();
 });
 
-test('footer nav routes to System, Design, Roadmap, About', async ({ page }) => {
+test('footer nav routes to System, Storage, Diagnostic', async ({ page }) => {
   await page.goto('/');
+  const footerNav = page.getByRole('navigation', { name: 'Footer navigation' });
 
-  await page.getByRole('button', { name: 'System page', exact: true }).click();
+  await footerNav.getByRole('button', { name: 'system', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'System', exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Design system page' }).click();
+  await footerNav.getByRole('button', { name: 'storage', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Storage', exact: true })).toBeVisible();
+
+  await footerNav.getByRole('button', { name: 'diagnostic', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Diagnostic', exact: true })).toBeVisible();
+});
+
+test('settings page surfaces Design, Roadmap, About as more pages', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: /Design system →/ }).click();
   await expect(page.getByRole('heading', { name: 'Design System' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Roadmap page' }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Roadmap →/ }).click();
   await expect(page.getByRole('heading', { name: 'Roadmap', exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'About page' }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /About →/ }).click();
   await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
 });
 
@@ -133,8 +148,8 @@ test('system page shows host, ollama, gpu, inventory', async ({ page }) => {
 test('models page lists available models', async ({ page }) => {
   await page.goto('/#/models');
   await expect(page.getByRole('heading', { name: 'Models' })).toBeVisible();
-  await expect(page.getByText('llama3.1:8b')).toBeVisible();
-  await expect(page.getByText('qwen3:14b')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use llama3.1:8b in chat' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use qwen3:14b in chat' })).toBeVisible();
 });
 
 test('theme toggle switches the html dark class', async ({ page }) => {

@@ -32,114 +32,64 @@
   const githubUrl = 'https://github.com/seheart/octopus';
 
   const isDark = $derived(theme.value === 'dark');
+
+  const navItems = [
+    { id: 'system', label: 'system' },
+    { id: 'storage', label: 'storage' },
+    { id: 'diagnostic', label: 'diagnostic' }
+  ];
+
+  function navClass(id) {
+    const active = route.page === id;
+    return `bg-transparent border-0 p-0 cursor-pointer transition-colors whitespace-nowrap ${
+      active
+        ? 'text-accent underline underline-offset-4 decoration-1'
+        : 'text-muted hover:text-accent'
+    }`;
+  }
 </script>
 
 <footer class="border-t border-border bg-surface">
-  <div class="grid grid-cols-3 items-center px-4 py-1.5 text-xs font-mono gap-4">
+  <div
+    class="flex flex-wrap items-center justify-between px-4 py-1.5 text-xs font-mono gap-x-4 gap-y-1.5"
+  >
     <!-- Left: status -->
-    <div class="flex items-center gap-3 justify-self-start">
-      <button
-        onclick={() => go('settings')}
-        aria-current={route.page === 'settings' ? 'page' : undefined}
-        class="bg-transparent border-0 p-1 cursor-pointer flex items-center transition-colors
-          {route.page === 'settings' ? 'text-accent' : 'text-muted hover:text-accent'}"
-        title="Settings"
-        aria-label="Settings"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="3" />
-          <path
-            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-          />
-        </svg>
-      </button>
-      <span class="font-semibold text-accent hidden sm:inline">octopus v0.1</span>
-      <span class="text-muted hidden sm:inline" aria-hidden="true">|</span>
+    <div class="flex items-center gap-3 md:order-1">
       <span
-        class="flex items-center gap-1.5"
+        class="flex items-center gap-1.5 whitespace-nowrap"
         title={connected ? 'Ollama connected' : 'Ollama unreachable'}
       >
         <span
-          class="inline-block w-2 h-2 rounded-full"
-          style={connected ? 'background: var(--success);' : 'background: var(--error);'}
+          class="inline-block w-2 h-2 rounded-full {connected ? 'bg-success' : 'bg-error'}"
           aria-hidden="true"
         ></span>
-        <span class="text-muted">ollama</span>
+        <span class={connected ? 'text-success' : 'text-error'}>
+          {connected ? 'ollama' : 'ollama offline'}
+        </span>
       </span>
-      <span class="text-muted hidden md:inline" aria-hidden="true">|</span>
-      <span class="text-muted hidden md:inline">{modelCount} models</span>
+      <span class="text-muted hidden sm:inline" aria-hidden="true">·</span>
+      <span class="text-muted hidden sm:inline whitespace-nowrap">{modelCount} models</span>
     </div>
 
-    <!-- Center: secondary nav -->
-    <nav class="flex items-center gap-3 justify-self-center" aria-label="Footer navigation">
-      <button
-        onclick={() => go('system')}
-        class="bg-transparent border-0 p-0 cursor-pointer transition-colors
-          {route.page === 'system' ? 'text-accent' : 'text-muted hover:text-accent'}"
-        aria-label="System page"
-      >
-        System
-      </button>
-      <span class="text-muted" aria-hidden="true">|</span>
-      <button
-        onclick={() => go('storage')}
-        class="bg-transparent border-0 p-0 cursor-pointer transition-colors
-          {route.page === 'storage' ? 'text-accent' : 'text-muted hover:text-accent'}"
-        aria-label="Storage page"
-      >
-        Storage
-      </button>
-      <span class="text-muted" aria-hidden="true">|</span>
-      <button
-        onclick={() => go('diagnostic')}
-        class="bg-transparent border-0 p-0 cursor-pointer transition-colors
-          {route.page === 'diagnostic' ? 'text-accent' : 'text-muted hover:text-accent'}"
-        aria-label="Diagnostic page"
-      >
-        Diagnostic
-      </button>
-      <span class="text-muted" aria-hidden="true">|</span>
-      <button
-        onclick={() => go('design')}
-        class="bg-transparent border-0 p-0 cursor-pointer transition-colors
-          {route.page === 'design' ? 'text-accent' : 'text-muted hover:text-accent'}"
-        aria-label="Design system page"
-      >
-        Design
-      </button>
-      <span class="text-muted" aria-hidden="true">|</span>
-      <button
-        onclick={() => go('roadmap')}
-        class="bg-transparent border-0 p-0 cursor-pointer transition-colors
-          {route.page === 'roadmap' ? 'text-accent' : 'text-muted hover:text-accent'}"
-        aria-label="Roadmap page"
-      >
-        Roadmap
-      </button>
-      <span class="text-muted" aria-hidden="true">|</span>
-      <button
-        onclick={() => go('about')}
-        class="bg-transparent border-0 p-0 cursor-pointer transition-colors
-          {route.page === 'about' ? 'text-accent' : 'text-muted hover:text-accent'}"
-        aria-label="About page"
-      >
-        About
-      </button>
+    <!-- Center: secondary nav. Source order is last so it wraps to its own
+         row when narrow; on md+ flex order puts it in the middle. -->
+    <nav
+      class="flex items-center gap-x-4 gap-y-1 flex-wrap justify-center w-full order-last md:w-auto md:flex-1 md:order-2"
+      aria-label="Footer navigation"
+    >
+      {#each navItems as item (item.id)}
+        <button
+          onclick={() => go(item.id)}
+          aria-current={route.page === item.id ? 'page' : undefined}
+          class={navClass(item.id)}
+        >
+          {item.label}
+        </button>
+      {/each}
     </nav>
 
-    <!-- Right: GitHub + theme toggle -->
-    <div class="flex items-center gap-2 justify-self-end">
+    <!-- Right: utility cluster (github, theme, settings) -->
+    <div class="flex items-center gap-1 md:order-3">
       <a
         href={githubUrl}
         target="_blank"
@@ -208,6 +158,32 @@
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
           </svg>
         {/if}
+      </button>
+      <button
+        onclick={() => go('settings')}
+        aria-current={route.page === 'settings' ? 'page' : undefined}
+        class="bg-transparent border-0 p-1 cursor-pointer flex items-center transition-colors
+          {route.page === 'settings' ? 'text-accent' : 'text-muted hover:text-accent'}"
+        title="Settings"
+        aria-label="Settings"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+          />
+        </svg>
       </button>
     </div>
   </div>

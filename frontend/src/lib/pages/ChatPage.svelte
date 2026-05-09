@@ -4,6 +4,7 @@
   import { selectedModel, setModel, consumePendingPrompt } from '../stores/model.svelte.js';
   import { recordToken } from '../stores/activity.svelte.js';
   import { renderMarkdown } from '../markdown.js';
+  import { Button } from '../components/ui/index.js';
 
   let models = $state([]);
   let messages = $state([]);
@@ -207,22 +208,28 @@
           <option value={m.name}>{m.name} · {fmtParams(m.details?.parameter_size)}</option>
         {/each}
       </select>
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onclick={clearChat}
         disabled={messages.length === 0 || streaming}
-        class="text-xs text-muted hover:text-body px-2 py-1 border border-border rounded disabled:opacity-40 disabled:cursor-not-allowed"
       >
         clear
-      </button>
+      </Button>
     </div>
 
     <div bind:this={scrollEl} class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
       {#if messages.length === 0}
         <div class="h-full flex items-center justify-center">
-          <div class="max-w-md w-full text-center space-y-5">
-            <div class="text-muted font-mono text-sm">pick a model · ask anything</div>
-            <div class="space-y-2 text-left">
-              <div class="text-xs text-muted font-mono uppercase tracking-wider mb-1">
+          <div class="max-w-md w-full space-y-6">
+            <div class="text-center space-y-2">
+              <h2 class="text-xl font-bold text-heading">pick a model · ask anything</h2>
+              <p class="text-sm text-muted">
+                Stream tokens with live timing. Stats appear in the sidebar.
+              </p>
+            </div>
+            <div class="space-y-2">
+              <div class="text-xs text-muted font-mono uppercase tracking-wider">
                 try one of these
               </div>
               {#each examplePrompts as p (p)}
@@ -311,21 +318,13 @@
           disabled={streaming}
         ></textarea>
         {#if streaming}
-          <button
-            onclick={stop}
-            class="bg-error text-canvas font-medium px-4 py-2 rounded text-sm hover:opacity-90"
-            aria-label="Stop generation"
-          >
+          <Button variant="danger" size="lg" onclick={stop} ariaLabel="Stop generation">
             stop
-          </button>
+          </Button>
         {:else}
-          <button
-            onclick={() => send()}
-            disabled={!input.trim()}
-            class="bg-accent text-canvas font-medium px-4 py-2 rounded text-sm disabled:opacity-40 hover:opacity-90"
-          >
+          <Button variant="primary" size="lg" onclick={() => send()} disabled={!input.trim()}>
             send
-          </button>
+          </Button>
         {/if}
       </div>
     </div>

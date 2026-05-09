@@ -3,8 +3,8 @@
   import { route, go } from '../stores/route.svelte.js';
 
   const primaryTabs = [
-    { id: 'chat', label: 'Chat' },
-    { id: 'models', label: 'Models' }
+    { id: 'chat', label: 'chat' },
+    { id: 'models', label: 'models' }
   ];
 </script>
 

@@ -292,3 +292,256 @@ def test_chat_forwards_thinking_field_for_reasoning_models(
     assert '"content": " about it"' in body
     assert '"type": "token"' in body
     assert '"content": "Hi"' in body
+
+
+def test_chat_skips_blank_and_unparseable_lines(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """Empty lines and JSON decode errors must not crash the stream."""
+    chunks = [
+        "",  # blank — `if not raw: continue`
+        "not json at all",  # bad JSON — `except JSONDecodeError: continue`
+        json.dumps({"message": {"content": "ok"}, "done": False}),
+        json.dumps(
+            {"message": {"content": ""}, "done": True, "eval_count": 1, "eval_duration": 0}
+        ),  # eval_duration=0 -> tokens_per_sec=0 branch
+    ]
+
+    class FakeStream:
+        async def __aenter__(self) -> "FakeStream":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def aiter_lines(self) -> Any:
+            for line in chunks:
+                yield line
+
+    fake_client = MagicMock()
+    fake_client.stream = MagicMock(return_value=FakeStream())
+    monkeypatch.setattr(main, "client", fake_client)
+    r = client.post(
+        "/api/chat",
+        json={"model": "fake", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 200
+    assert '"content": "ok"' in r.text
+    assert '"tokens_per_sec": 0' in r.text
+
+
+def test_pull_skips_blank_and_unparseable_lines(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    chunks = [
+        "",  # blank
+        "junk",  # bad JSON
+        json.dumps({"status": "success"}),
+    ]
+
+    class FakeStream:
+        async def __aenter__(self) -> "FakeStream":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def aiter_lines(self) -> Any:
+            for line in chunks:
+                yield line
+
+    fake_client = MagicMock()
+    fake_client.stream = MagicMock(return_value=FakeStream())
+    monkeypatch.setattr(main, "client", fake_client)
+    r = client.post("/api/pull", json={"model": "fake:1b"})
+    assert r.status_code == 200
+    assert '"status": "success"' in r.text
+
+
+def test_pull_emits_error_on_request_failure(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """If the upstream fetch dies, the SSE stream must emit a `status: error`
+    event rather than tearing down the connection."""
+    import httpx
+
+    class BoomStream:
+        async def __aenter__(self) -> "BoomStream":
+            raise httpx.ConnectError("ollama gone")
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    fake_client = MagicMock()
+    fake_client.stream = MagicMock(return_value=BoomStream())
+    monkeypatch.setattr(main, "client", fake_client)
+    r = client.post("/api/pull", json={"model": "fake:1b"})
+    assert r.status_code == 200
+    assert '"status": "error"' in r.text
+    assert "ollama gone" in r.text
+
+
+def test_check_disk_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_check_disk maps free GB into pass/warn/fail tiers."""
+    import shutil as _shutil
+    from collections import namedtuple
+
+    Usage = namedtuple("Usage", ["total", "used", "free"])
+
+    async def call() -> dict[str, Any]:
+        return await main._check_disk()
+
+    # pass: >10 GB
+    monkeypatch.setattr(_shutil, "disk_usage", lambda _: Usage(0, 0, 50 * 10**9))
+    res = pytest.run(call) if False else __import__("asyncio").run(call())
+    assert res["status"] == "pass"
+
+    # warn: between 2 and 10 GB
+    monkeypatch.setattr(_shutil, "disk_usage", lambda _: Usage(0, 0, 5 * 10**9))
+    res = __import__("asyncio").run(call())
+    assert res["status"] == "warn"
+
+    # fail: under 2 GB
+    monkeypatch.setattr(_shutil, "disk_usage", lambda _: Usage(0, 0, 1 * 10**9))
+    res = __import__("asyncio").run(call())
+    assert res["status"] == "fail"
+
+    # OSError path
+    def boom(_: Any) -> None:
+        raise OSError("nope")
+
+    monkeypatch.setattr(_shutil, "disk_usage", boom)
+    res = __import__("asyncio").run(call())
+    assert res["status"] == "fail"
+
+
+def test_check_ollama_pass_and_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_check_ollama handles 200, non-200, and connection error."""
+    import asyncio
+
+    import httpx as _httpx
+
+    # pass
+    ok = MagicMock()
+    ok.status_code = 200
+    ok.json.return_value = {"version": "1.2.3"}
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(return_value=ok)))
+    res = asyncio.run(main._check_ollama())
+    assert res["status"] == "pass"
+    assert "1.2.3" in res["detail"]
+
+    # non-200
+    bad = MagicMock()
+    bad.status_code = 503
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(return_value=bad)))
+    res = asyncio.run(main._check_ollama())
+    assert res["status"] == "fail"
+    assert "503" in res["detail"]
+
+    # connect error
+    def raise_connect(*_: Any, **__: Any) -> None:
+        raise _httpx.ConnectError("down")
+
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(side_effect=raise_connect)))
+    res = asyncio.run(main._check_ollama())
+    assert res["status"] == "fail"
+    assert "unreachable" in res["detail"]
+
+
+def test_check_audit_scans_frontend(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    """_check_audit walks frontend/src and reports forbidden patterns."""
+    import asyncio
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "ok.svelte").write_text("export const x = 1;\n", encoding="utf-8")
+    (src / "leaky.js").write_text(
+        "const apiKey = 'abc';\nconsole.log('debug');\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(main, "FRONTEND_DIR", tmp_path)
+    monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
+    res = asyncio.run(main._check_audit())
+    # Two patterns trip in leaky.js — both reported, no exception, status warn.
+    assert res["status"] == "warn"
+    assert "console.log" in res["detail"]
+
+
+def test_check_audit_clean_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    import asyncio
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "clean.svelte").write_text("export const x = 1;\n", encoding="utf-8")
+    monkeypatch.setattr(main, "FRONTEND_DIR", tmp_path)
+    monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
+    res = asyncio.run(main._check_audit())
+    assert res["status"] == "pass"
+    assert "scanned" in res["detail"]
+
+
+def test_run_shell_pass_and_fail(tmp_path: Any) -> None:
+    """_run_shell wraps subprocess; verify pass, fail, and missing-binary paths."""
+    import asyncio
+
+    # pass — `true` exits 0
+    res = asyncio.run(main._run_shell(["true"], tmp_path))
+    assert res["status"] == "pass"
+
+    # fail — `false` exits 1
+    res = asyncio.run(main._run_shell(["false"], tmp_path))
+    assert res["status"] == "fail"
+
+    # missing binary
+    res = asyncio.run(main._run_shell(["definitely-not-a-real-binary-xyz"], tmp_path))
+    assert res["status"] == "fail"
+    assert "missing binary" in res["detail"]
+
+
+def test_diagnostic_checks_endpoint_lists_all_checks(client: TestClient) -> None:
+    r = client.get("/api/diagnostic/checks")
+    assert r.status_code == 200
+    body = r.json()
+    ids = {c["id"] for c in body["checks"]}
+    # Sanity: a representative subset must be present.
+    assert {"ollama", "disk", "audit"}.issubset(ids)
+    for c in body["checks"]:
+        assert {"id", "name", "category"} <= c.keys()
+
+
+def test_run_diagnostic_streams_summary(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """End-to-end: run_diagnostic with stubbed checks emits start, per-check,
+    and a final done event with a summary."""
+
+    async def stub_pass() -> dict[str, Any]:
+        return {"status": "pass", "detail": "ok"}
+
+    async def stub_fail() -> dict[str, Any]:
+        return {"status": "fail", "detail": "bad"}
+
+    async def stub_raises() -> dict[str, Any]:
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(
+        main,
+        "_DIAGNOSTIC_CHECKS",
+        [
+            ("a", "first", "runtime", stub_pass),
+            ("b", "second", "code", stub_fail),
+            ("c", "third", "audit", stub_raises),
+        ],
+    )
+    r = client.post("/api/diagnostic")
+    assert r.status_code == 200
+    body = r.text
+    assert '"type": "start"' in body
+    assert '"type": "running"' in body
+    assert '"type": "check"' in body
+    assert '"type": "done"' in body
+    # Raised exception becomes a visible fail row.
+    assert "check raised" in body
+    # Summary should reflect 1 pass and 2 fail.
+    assert '"pass": 1' in body
+    assert '"fail": 2' in body
