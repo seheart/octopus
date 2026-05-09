@@ -1,9 +1,12 @@
+import asyncio
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -257,5 +260,204 @@ async def pull_model(req: PullRequest) -> StreamingResponse:
                     yield _sse(chunk)
         except httpx.RequestError as e:
             yield _sse({"status": "error", "error": str(e)})
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+# --- Diagnostic ---------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BACKEND_DIR = REPO_ROOT / "backend"
+FRONTEND_DIR = REPO_ROOT / "frontend"
+
+
+async def _run_shell(cmd: list[str], cwd: Path, timeout: float = 120.0) -> dict[str, Any]:
+    """Run a shell command, return {status, detail} where status is pass/fail."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=str(cwd),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return {"status": "fail", "detail": f"timed out after {timeout:.0f}s"}
+        text = stdout.decode("utf-8", errors="replace").strip()
+        # Trim noise — keep last ~40 lines so the UI excerpt stays useful.
+        lines = text.splitlines()
+        excerpt = "\n".join(lines[-40:]) if len(lines) > 40 else text
+        if proc.returncode == 0:
+            return {"status": "pass", "detail": excerpt or "ok"}
+        return {"status": "fail", "detail": excerpt or f"exit {proc.returncode}"}
+    except FileNotFoundError as e:
+        return {"status": "fail", "detail": f"missing binary: {e.filename}"}
+
+
+async def _check_ollama() -> dict[str, Any]:
+    try:
+        r = await client.get("/api/version", timeout=2.0)
+        if r.status_code == 200:
+            v = r.json().get("version", "?")
+            return {"status": "pass", "detail": f"version {v} on {OLLAMA_URL}"}
+        return {"status": "fail", "detail": f"HTTP {r.status_code} from {OLLAMA_URL}"}
+    except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        return {"status": "fail", "detail": f"unreachable: {e}"}
+
+
+async def _check_disk() -> dict[str, Any]:
+    try:
+        usage = shutil.disk_usage("/")
+        gb_free = usage.free / 1e9
+        if gb_free < 2:
+            return {"status": "fail", "detail": f"only {gb_free:.1f} GB free on root"}
+        if gb_free < 10:
+            return {"status": "warn", "detail": f"{gb_free:.1f} GB free on root"}
+        return {"status": "pass", "detail": f"{gb_free:.1f} GB free on root"}
+    except OSError as e:
+        return {"status": "fail", "detail": str(e)}
+
+
+# Patterns we never want to ship — secrets, debug leftovers.
+_AUDIT_PATTERNS = [
+    (
+        re.compile(r"(?i)\b(api[_-]?key|secret|password|bearer\s+[A-Za-z0-9_\-]{16,})\s*[:=]"),
+        "possible credential literal",
+    ),
+    (re.compile(r"console\.log\("), "console.log left in source"),
+    (re.compile(r"\bdebugger\b"), "debugger statement"),
+]
+
+
+async def _check_audit() -> dict[str, Any]:
+    findings: list[str] = []
+    targets = list((FRONTEND_DIR / "src").rglob("*.svelte")) + list(
+        (FRONTEND_DIR / "src").rglob("*.js")
+    )
+    for path in targets:
+        if "node_modules" in path.parts or ".test." in path.name or ".spec." in path.name:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for pattern, label in _AUDIT_PATTERNS:
+            for m in pattern.finditer(text):
+                line_no = text.count("\n", 0, m.start()) + 1
+                rel = path.relative_to(REPO_ROOT)
+                findings.append(f"{rel}:{line_no}  {label}")
+                if len(findings) >= 20:
+                    break
+            if len(findings) >= 20:
+                break
+        if len(findings) >= 20:
+            break
+    if not findings:
+        return {"status": "pass", "detail": f"scanned {len(targets)} files, no findings"}
+    detail = "\n".join(findings)
+    return {"status": "warn", "detail": detail}
+
+
+CheckFn = Callable[[], Awaitable[dict[str, Any]]]
+# (id, label, category, fn). Category groups the UI; order is run order.
+_DIAGNOSTIC_CHECKS: list[tuple[str, str, str, CheckFn]] = [
+    ("ollama", "Ollama reachable", "runtime", _check_ollama),
+    ("disk", "Disk free on root", "runtime", _check_disk),
+    (
+        "backend_lint",
+        "backend · ruff lint",
+        "code",
+        lambda: _run_shell([".venv/bin/ruff", "check", "."], BACKEND_DIR),
+    ),
+    (
+        "backend_format",
+        "backend · ruff format",
+        "code",
+        lambda: _run_shell([".venv/bin/ruff", "format", "--check", "."], BACKEND_DIR),
+    ),
+    (
+        "backend_types",
+        "backend · mypy",
+        "code",
+        lambda: _run_shell([".venv/bin/mypy", "."], BACKEND_DIR),
+    ),
+    (
+        "backend_tests",
+        "backend · pytest",
+        "code",
+        lambda: _run_shell([".venv/bin/pytest", "-q"], BACKEND_DIR),
+    ),
+    (
+        "frontend_types",
+        "frontend · svelte-check",
+        "code",
+        lambda: _run_shell(["npm", "run", "check"], FRONTEND_DIR),
+    ),
+    (
+        "frontend_lint",
+        "frontend · eslint",
+        "code",
+        lambda: _run_shell(["npm", "run", "lint"], FRONTEND_DIR),
+    ),
+    (
+        "frontend_tests",
+        "frontend · vitest",
+        "code",
+        lambda: _run_shell(["npm", "run", "test"], FRONTEND_DIR),
+    ),
+    ("audit", "audit · secrets / debug leftovers", "audit", _check_audit),
+]
+
+
+@app.get("/api/diagnostic/checks")
+def diagnostic_checks() -> dict[str, Any]:
+    """List the checks the diagnostic will run, so the UI can render them up front."""
+    return {
+        "checks": [
+            {"id": cid, "name": name, "category": cat} for cid, name, cat, _ in _DIAGNOSTIC_CHECKS
+        ]
+    }
+
+
+@app.post("/api/diagnostic")
+async def run_diagnostic() -> StreamingResponse:
+    """Run every diagnostic check, streaming results as each finishes (SSE)."""
+
+    async def stream() -> AsyncIterator[bytes]:
+        run_start = time.perf_counter()
+        summary = {"pass": 0, "warn": 0, "fail": 0}
+        yield _sse({"type": "start", "total": len(_DIAGNOSTIC_CHECKS)})
+        for cid, name, category, fn in _DIAGNOSTIC_CHECKS:
+            yield _sse({"type": "running", "id": cid})
+            t0 = time.perf_counter()
+            try:
+                result = await fn()
+            except Exception as e:
+                # Any uncaught error becomes a visible "fail" row instead of killing the stream.
+                result = {"status": "fail", "detail": f"check raised: {e}"}
+            ms = int((time.perf_counter() - t0) * 1000)
+            status = result.get("status", "fail")
+            summary[status] = summary.get(status, 0) + 1
+            yield _sse(
+                {
+                    "type": "check",
+                    "id": cid,
+                    "name": name,
+                    "category": category,
+                    "status": status,
+                    "duration_ms": ms,
+                    "detail": result.get("detail", ""),
+                }
+            )
+        yield _sse(
+            {
+                "type": "done",
+                "summary": summary,
+                "duration_ms": int((time.perf_counter() - run_start) * 1000),
+            }
+        )
 
     return StreamingResponse(stream(), media_type="text/event-stream")

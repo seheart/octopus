@@ -7,6 +7,7 @@
   import ModelsPage from './lib/pages/ModelsPage.svelte';
   import PullPage from './lib/pages/PullPage.svelte';
   import StoragePage from './lib/pages/StoragePage.svelte';
+  import DiagnosticPage from './lib/pages/DiagnosticPage.svelte';
   import RoadmapPage from './lib/pages/RoadmapPage.svelte';
   import SystemPage from './lib/pages/SystemPage.svelte';
   import DesignPage from './lib/pages/DesignPage.svelte';
@@ -30,6 +31,8 @@
       <PullPage />
     {:else if route.page === 'storage'}
       <StoragePage />
+    {:else if route.page === 'diagnostic'}
+      <DiagnosticPage />
     {:else if route.page === 'roadmap'}
       <RoadmapPage />
     {:else if route.page === 'system'}

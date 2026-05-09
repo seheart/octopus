@@ -3,6 +3,7 @@ const PAGES = [
   'models',
   'pull',
   'storage',
+  'diagnostic',
   'roadmap',
   'system',
   'design',

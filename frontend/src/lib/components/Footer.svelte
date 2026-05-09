@@ -38,6 +38,32 @@
   <div class="grid grid-cols-3 items-center px-4 py-1.5 text-xs font-mono gap-4">
     <!-- Left: status -->
     <div class="flex items-center gap-3 justify-self-start">
+      <button
+        onclick={() => go('settings')}
+        aria-current={route.page === 'settings' ? 'page' : undefined}
+        class="bg-transparent border-0 p-1 cursor-pointer flex items-center transition-colors
+          {route.page === 'settings' ? 'text-accent' : 'text-muted hover:text-accent'}"
+        title="Settings"
+        aria-label="Settings"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+          />
+        </svg>
+      </button>
       <span class="font-semibold text-accent hidden sm:inline">octopus v0.1</span>
       <span class="text-muted hidden sm:inline" aria-hidden="true">|</span>
       <span
@@ -73,6 +99,15 @@
         aria-label="Storage page"
       >
         Storage
+      </button>
+      <span class="text-muted" aria-hidden="true">|</span>
+      <button
+        onclick={() => go('diagnostic')}
+        class="bg-transparent border-0 p-0 cursor-pointer transition-colors
+          {route.page === 'diagnostic' ? 'text-accent' : 'text-muted hover:text-accent'}"
+        aria-label="Diagnostic page"
+      >
+        Diagnostic
       </button>
       <span class="text-muted" aria-hidden="true">|</span>
       <button

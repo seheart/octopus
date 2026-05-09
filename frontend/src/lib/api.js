@@ -87,6 +87,50 @@ export function pullModel(name, onEvent) {
   return { done, abort: () => ctrl.abort() };
 }
 
+/**
+ * Stream the diagnostic run. Calls onEvent for each NDJSON event the backend emits.
+ * Returns { done, abort } — await done; call abort to cancel.
+ *
+ * @param {(evt: {type: string, [key: string]: any}) => void} onEvent
+ * @returns {{ done: Promise<void>, abort: () => void }}
+ */
+export function runDiagnostic(onEvent) {
+  const ctrl = new AbortController();
+  const done = (async () => {
+    const resp = await fetch('/api/diagnostic', {
+      method: 'POST',
+      signal: ctrl.signal
+    });
+    if (!resp.ok) throw new Error(`diagnostic failed: ${resp.status}`);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done: streamDone } = await reader.read();
+      if (streamDone) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n\n');
+      buf = lines.pop();
+      for (const block of lines) {
+        const line = block.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        try {
+          onEvent(JSON.parse(line.slice(6)));
+        } catch (_e) {
+          /* skip malformed event */
+        }
+      }
+    }
+  })();
+  return { done, abort: () => ctrl.abort() };
+}
+
+export async function getDiagnosticChecks() {
+  const r = await fetch('/api/diagnostic/checks');
+  if (!r.ok) throw new Error('failed to load diagnostic checks');
+  return (await r.json()).checks || [];
+}
+
 export function fmtBytes(b) {
   if (!b) return '–';
   const gb = b / 1e9;

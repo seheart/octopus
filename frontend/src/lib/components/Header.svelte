@@ -32,17 +32,5 @@
         >
       {/each}
     </nav>
-
-    <button
-      onclick={() => go('settings')}
-      aria-current={route.page === 'settings' ? 'page' : undefined}
-      class="px-3 py-1.5 text-sm rounded transition-colors
-        {route.page === 'settings'
-        ? 'bg-surface-2 text-heading font-medium'
-        : 'text-muted hover:text-body hover:bg-surface-2'}"
-      aria-label="Settings"
-    >
-      Settings
-    </button>
   </div>
 </header>
