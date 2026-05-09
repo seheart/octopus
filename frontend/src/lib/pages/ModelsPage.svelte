@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import {
     getModels,
     getLoaded,
@@ -13,6 +13,7 @@
   import { setModel, selectedModel, setPendingPrompt } from '../stores/model.svelte.js';
   import { Card } from '../components/ui/index.js';
   import { modelHints } from '../modelHints.js';
+  import Oscilloscope from '../components/Oscilloscope.svelte';
 
   let models = $state([]);
   let loaded = $state([]);
@@ -25,17 +26,27 @@
   // Tracks which model is currently being unloaded (so we can show "stopping…")
   let unloadingName = $state('');
 
+  /** @type {ReturnType<typeof setInterval> | undefined} */
+  let pollHandle;
+
   async function refresh() {
-    try {
-      [models, loaded] = await Promise.all([getModels(), getLoaded()]);
+    const [m, l] = await Promise.allSettled([getModels(), getLoaded()]);
+    if (m.status === 'fulfilled') {
+      models = m.value;
       err = null;
-    } catch (e) {
-      err = e.message;
+    } else {
+      err = m.reason?.message || 'failed to load models';
     }
+    if (l.status === 'fulfilled') loaded = l.value;
     loading = false;
   }
 
-  onMount(refresh);
+  onMount(() => {
+    refresh();
+    // Re-poll so the scope sees newly-loaded / unloaded models.
+    pollHandle = setInterval(refresh, 2000);
+  });
+  onDestroy(() => clearInterval(pollHandle));
 
   function isLoaded(name) {
     return loaded.some((m) => m.name === name);
@@ -103,6 +114,16 @@
         + Add a model
       </button>
     </div>
+
+    {#if loaded.length > 0}
+      <div>
+        <div class="text-xs font-mono text-muted uppercase tracking-wider mb-2">
+          live activity · {loaded.length}
+          {loaded.length === 1 ? 'model' : 'models'} in vram
+        </div>
+        <Oscilloscope models={loaded} />
+      </div>
+    {/if}
 
     <!-- Installed -->
     <div>

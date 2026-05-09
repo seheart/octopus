@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { getModels, getLoaded, getGpu, fmtBytes, fmtParams } from '../api.js';
   import { selectedModel, setModel, consumePendingPrompt } from '../stores/model.svelte.js';
+  import { recordToken } from '../stores/activity.svelte.js';
   import { renderMarkdown } from '../markdown.js';
 
   let models = $state([]);
@@ -114,6 +115,8 @@
             last.content += evt.content;
             messages = [...messages.slice(0, -1), last];
             warmupActive = false;
+            // Real per-model signal for the Oscilloscope on the Models page.
+            recordToken(selectedModel.value);
             scrollToBottom();
           } else if (evt.type === 'thinking') {
             last.thinking = (last.thinking || '') + evt.content;
