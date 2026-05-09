@@ -15,8 +15,14 @@
   import SettingsPage from './lib/pages/SettingsPage.svelte';
   import { route } from './lib/stores/route.svelte.js';
   import { initTheme } from './lib/stores/theme.svelte.js';
+  import { startActivityPoller } from './lib/stores/activity.svelte.js';
 
-  onMount(() => initTheme());
+  onMount(() => {
+    initTheme();
+    // Watches Ollama globally so the Oscilloscope shows activity from
+    // every client (Octopus, raven, ollama CLI, …) — not just our chats.
+    startActivityPoller();
+  });
 </script>
 
 <div class="h-screen flex flex-col bg-canvas text-body font-sans">

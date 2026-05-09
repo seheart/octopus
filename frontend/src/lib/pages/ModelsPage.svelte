@@ -98,8 +98,25 @@
   }
 </script>
 
-<div class="h-full overflow-y-auto px-6 py-6">
-  <div class="max-w-5xl mx-auto space-y-6">
+<div class="h-full flex flex-col lg:flex-row gap-6 px-6 py-6 overflow-hidden">
+  <!-- LEFT: live oscilloscope, big, always visible -->
+  <div class="lg:w-2/5 flex flex-col min-h-[280px] lg:min-h-0">
+    <div class="mb-2 shrink-0">
+      <div class="text-xs font-mono text-muted uppercase tracking-wider">
+        live activity · {loaded.length}
+        {loaded.length === 1 ? 'model' : 'models'} in vram
+      </div>
+      <div class="text-[10px] font-mono text-muted opacity-70 mt-0.5">
+        all Ollama clients · spikes per request
+      </div>
+    </div>
+    <div class="flex-1 min-h-0">
+      <Oscilloscope models={loaded} />
+    </div>
+  </div>
+
+  <!-- RIGHT: header + installed models, scrollable -->
+  <div class="flex-1 overflow-y-auto min-h-0 space-y-6">
     <div class="flex items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-heading mb-1">Models</h1>
@@ -114,16 +131,6 @@
         + Add a model
       </button>
     </div>
-
-    {#if loaded.length > 0}
-      <div>
-        <div class="text-xs font-mono text-muted uppercase tracking-wider mb-2">
-          live activity · {loaded.length}
-          {loaded.length === 1 ? 'model' : 'models'} in vram
-        </div>
-        <Oscilloscope models={loaded} />
-      </div>
-    {/if}
 
     <!-- Installed -->
     <div>

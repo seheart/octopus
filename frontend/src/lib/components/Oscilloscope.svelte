@@ -61,78 +61,76 @@
   });
 </script>
 
-<div class="rounded-lg p-3" style="background: var(--scope-bg)">
-  <svg
-    viewBox="0 0 {W} {H}"
-    class="w-full h-auto"
-    role="img"
-    aria-label="Per-model tokens per second"
-  >
-    <defs>
-      <pattern id="osc-grid" width="30" height="22" patternUnits="userSpaceOnUse">
+<div class="rounded-lg p-3 flex flex-col h-full min-h-0" style="background: var(--scope-bg)">
+  <div class="relative flex-1 min-h-0">
+    <svg
+      viewBox="0 0 {W} {H}"
+      class="absolute inset-0 w-full h-full"
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Per-model tokens per second"
+    >
+      <defs>
+        <pattern id="osc-grid" width="30" height="22" patternUnits="userSpaceOnUse">
+          <path
+            d="M 30 0 L 0 0 0 22"
+            fill="none"
+            stroke-width="0.5"
+            style="stroke: var(--scope-grid)"
+          />
+        </pattern>
+        <filter id="osc-glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="2" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <rect width={W} height={H} fill="url(#osc-grid)" />
+      <!-- Baseline (idle = 0 tok/s) -->
+      <line
+        x1="0"
+        y1={H - 8}
+        x2={W}
+        y2={H - 8}
+        stroke-width="0.8"
+        style="stroke: var(--scope-grid)"
+      />
+      <!-- Full-scale guide -->
+      <line
+        x1="0"
+        y1="8"
+        x2={W}
+        y2="8"
+        stroke-width="0.4"
+        stroke-dasharray="2 4"
+        style="stroke: var(--scope-grid)"
+      />
+      {#each traces as tr (tr.name)}
         <path
-          d="M 30 0 L 0 0 0 22"
+          d={tr.d}
           fill="none"
-          stroke-width="0.5"
-          style="stroke: var(--scope-grid)"
+          stroke-width="1.4"
+          filter="url(#osc-glow)"
+          style="stroke: {tr.color}"
         />
-      </pattern>
-      <filter id="osc-glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="2" result="blur" />
-        <feMerge>
-          <feMergeNode in="blur" />
-          <feMergeNode in="SourceGraphic" />
-        </feMerge>
-      </filter>
-    </defs>
-    <rect width={W} height={H} fill="url(#osc-grid)" />
-    <!-- Baseline (idle = 0 tok/s) -->
-    <line
-      x1="0"
-      y1={H - 8}
-      x2={W}
-      y2={H - 8}
-      stroke-width="0.8"
-      style="stroke: var(--scope-grid)"
-    />
-    <!-- Full-scale guide -->
-    <line
-      x1="0"
-      y1="8"
-      x2={W}
-      y2="8"
-      stroke-width="0.4"
-      stroke-dasharray="2 4"
-      style="stroke: var(--scope-grid)"
-    />
-    <text
-      x="4"
-      y="14"
-      font-family="ui-monospace, monospace"
-      font-size="9"
-      style="fill: var(--scope-axis-label)"
+      {/each}
+    </svg>
+    <!-- Axis labels in HTML so they aren't stretched by preserveAspectRatio="none" -->
+    <span
+      class="absolute left-1.5 top-1 text-[10px] font-mono pointer-events-none"
+      style="color: var(--scope-axis-label)"
     >
       {fullScale} tok/s
-    </text>
-    <text
-      x="4"
-      y={H - 12}
-      font-family="ui-monospace, monospace"
-      font-size="9"
-      style="fill: var(--scope-axis-label)"
+    </span>
+    <span
+      class="absolute left-1.5 bottom-1 text-[10px] font-mono pointer-events-none"
+      style="color: var(--scope-axis-label)"
     >
       0 tok/s
-    </text>
-    {#each traces as tr (tr.name)}
-      <path
-        d={tr.d}
-        fill="none"
-        stroke-width="1.4"
-        filter="url(#osc-glow)"
-        style="stroke: {tr.color}"
-      />
-    {/each}
-  </svg>
+    </span>
+  </div>
   <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] font-mono">
     {#each traces as tr (tr.name)}
       <span class="flex items-center gap-1.5" style="color: {tr.color}">
