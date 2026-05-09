@@ -1,4 +1,14 @@
-const PAGES = ['chat', 'models', 'pull', 'roadmap', 'system', 'design', 'about', 'settings'];
+const PAGES = [
+  'chat',
+  'models',
+  'pull',
+  'storage',
+  'roadmap',
+  'system',
+  'design',
+  'about',
+  'settings'
+];
 
 function read() {
   const hash = location.hash.replace(/^#\/?/, '').split('/')[0];

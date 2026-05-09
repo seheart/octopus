@@ -67,6 +67,15 @@
       </button>
       <span class="text-muted" aria-hidden="true">|</span>
       <button
+        onclick={() => go('storage')}
+        class="bg-transparent border-0 p-0 cursor-pointer transition-colors
+          {route.page === 'storage' ? 'text-accent' : 'text-muted hover:text-accent'}"
+        aria-label="Storage page"
+      >
+        Storage
+      </button>
+      <span class="text-muted" aria-hidden="true">|</span>
+      <button
         onclick={() => go('design')}
         class="bg-transparent border-0 p-0 cursor-pointer transition-colors
           {route.page === 'design' ? 'text-accent' : 'text-muted hover:text-accent'}"
