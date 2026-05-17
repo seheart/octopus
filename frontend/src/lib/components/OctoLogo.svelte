@@ -1,5 +1,8 @@
 <script>
-  const { size = 18 } = $props();
+  const { size = 18, color = null, bg = null } = $props();
+
+  const fillColor = $derived(color ?? 'var(--logo, var(--text-heading))');
+  const eyeColor = $derived(bg ?? 'var(--bg)');
 </script>
 
 <svg
@@ -9,7 +12,7 @@
   xmlns="http://www.w3.org/2000/svg"
   aria-label="Octopus logo"
   role="img"
-  style="color: var(--text-heading);"
+  style="color: {fillColor};"
 >
   <!-- Head -->
   <path
@@ -17,8 +20,8 @@
     fill="currentColor"
   />
   <!-- Eyes (background-color punch-outs) -->
-  <circle cx="25" cy="22" r="2.5" style="fill: var(--bg);" />
-  <circle cx="39" cy="22" r="2.5" style="fill: var(--bg);" />
+  <circle cx="25" cy="22" r="2.5" style="fill: {eyeColor};" />
+  <circle cx="39" cy="22" r="2.5" style="fill: {eyeColor};" />
   <!-- 8 tentacles -->
   <g fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round">
     <path d="M17 35 Q13 42 16 50 Q19 55 14 60" />

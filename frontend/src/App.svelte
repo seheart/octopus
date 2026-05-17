@@ -11,6 +11,7 @@
   import RoadmapPage from './lib/pages/RoadmapPage.svelte';
   import SystemPage from './lib/pages/SystemPage.svelte';
   import DesignPage from './lib/pages/DesignPage.svelte';
+  import LabsPage from './lib/pages/LabsPage.svelte';
   import AboutPage from './lib/pages/AboutPage.svelte';
   import SettingsPage from './lib/pages/SettingsPage.svelte';
   import { route } from './lib/stores/route.svelte.js';
@@ -45,6 +46,8 @@
       <SystemPage />
     {:else if route.page === 'design'}
       <DesignPage />
+    {:else if route.page === 'labs'}
+      <LabsPage />
     {:else if route.page === 'about'}
       <AboutPage />
     {:else if route.page === 'settings'}

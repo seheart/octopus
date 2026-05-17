@@ -34,6 +34,7 @@
   --success: #2d7a4a;
   --error: #b62a4a;
   --warning: #b8740c;
+  --logo: #be185d;
 
   /* Oscilloscope phosphor palette — intentionally theme-independent. */
   --scope-bg: #000000;
@@ -53,6 +54,7 @@ html.dark {
   --success: #5fc88a;
   --error: #ef5d6e;
   --warning: #f5b045;
+  --logo: #22d3ee;
 }
 
 html,

@@ -17,4 +17,11 @@ fi
 trap 'kill 0' EXIT
 backend/.venv/bin/uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8800 &
 (cd frontend && npm run dev) &
+
+# Open browser once frontend is reachable
+(
+  until curl -sf http://127.0.0.1:8801 >/dev/null 2>&1; do sleep 0.3; done
+  command -v xdg-open >/dev/null && xdg-open http://127.0.0.1:8801 >/dev/null 2>&1 || true
+) &
+
 wait

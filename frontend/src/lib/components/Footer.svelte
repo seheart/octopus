@@ -36,7 +36,8 @@
   const navItems = [
     { id: 'system', label: 'system' },
     { id: 'storage', label: 'storage' },
-    { id: 'diagnostic', label: 'diagnostic' }
+    { id: 'diagnostic', label: 'diagnostic' },
+    { id: 'labs', label: 'labs' }
   ];
 
   function navClass(id) {
