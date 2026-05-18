@@ -34,6 +34,7 @@
   const isDark = $derived(theme.value === 'dark');
 
   const navItems = [
+    { id: 'pull', label: 'pull' },
     { id: 'system', label: 'system' },
     { id: 'storage', label: 'storage' },
     { id: 'diagnostic', label: 'diagnostic' },

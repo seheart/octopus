@@ -40,6 +40,16 @@ if grep -rn --include="*.svelte" \
   FAIL=1
 fi
 
+# 4. rgb()/rgba()/hsl()/hsla() literals in .svelte files. The hex check above
+# misses these and they bypass the token system just the same.
+if grep -rn --include="*.svelte" \
+    -E "(rgba?\(|hsla?\()[^)]" \
+    "$SRC" 2>/dev/null | grep -vE "^[^:]+:[^:]+:\s*//"; then
+  echo ""
+  echo "✗ rgb()/hsl() color literals in component code. Use CSS variables or token utilities."
+  FAIL=1
+fi
+
 if [ $FAIL -eq 0 ]; then
   echo "✓ no forbidden patterns"
 fi

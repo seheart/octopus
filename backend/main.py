@@ -6,32 +6,77 @@ import shutil
 import subprocess
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 
-app = FastAPI(title="Octopus")
+# Ollama model identifiers: alnum + `_ . : / -`. We additionally reject `..`
+# and leading `/` so a malformed name can't trick a downstream component into
+# walking the filesystem if it ever interprets it as a path.
+_MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9_./:-]{1,200}$")
+
+
+def _validate_model_name(name: str) -> str:
+    if not _MODEL_NAME_RE.match(name) or ".." in name or name.startswith("/"):
+        raise HTTPException(status_code=400, detail="invalid model name")
+    return name
+
+
 client = httpx.AsyncClient(base_url=OLLAMA_URL, timeout=httpx.Timeout(600.0, connect=5.0))
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Own the global httpx client's lifecycle — close it on shutdown."""
+    try:
+        yield
+    finally:
+        await client.aclose()
+
+
+app = FastAPI(title="Octopus", lifespan=lifespan)
 
 
 class ChatMessage(BaseModel):
     role: str
     content: str
 
+    @field_validator("role")
+    @classmethod
+    def _check_role(cls, v: str) -> str:
+        if v not in {"user", "assistant", "system"}:
+            raise ValueError(f"invalid role: {v!r}")
+        return v
+
 
 class ChatRequest(BaseModel):
     model: str
     messages: list[ChatMessage]
 
+    @field_validator("model")
+    @classmethod
+    def _check_model(cls, v: str) -> str:
+        if not _MODEL_NAME_RE.match(v) or ".." in v or v.startswith("/"):
+            raise ValueError("invalid model name")
+        return v
+
 
 class PullRequest(BaseModel):
     model: str
+
+    @field_validator("model")
+    @classmethod
+    def _check_model(cls, v: str) -> str:
+        if not _MODEL_NAME_RE.match(v) or ".." in v or v.startswith("/"):
+            raise ValueError("invalid model name")
+        return v
 
 
 @app.get("/api/models")
@@ -152,48 +197,55 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     async def stream() -> AsyncIterator[bytes]:
         start = time.perf_counter()
         first_token_time: float | None = None
-        async with client.stream(
-            "POST",
-            "/api/chat",
-            json={
-                "model": req.model,
-                "messages": [m.model_dump() for m in req.messages],
-                "stream": True,
-            },
-        ) as resp:
-            async for raw in resp.aiter_lines():
-                if not raw:
-                    continue
-                try:
-                    chunk = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                msg = chunk.get("message", {})
-                # Reasoning models (qwen3, deepseek-r1, etc.) stream into
-                # `thinking` before producing `content`. Forward both so the
-                # UI can show the model is alive instead of silently waiting.
-                if msg.get("thinking"):
-                    yield _sse({"type": "thinking", "content": msg["thinking"]})
-                if first_token_time is None and msg.get("content"):
-                    first_token_time = time.perf_counter()
-                    ttft_ms = int((first_token_time - start) * 1000)
-                    yield _sse({"type": "ttft", "ms": ttft_ms})
-                if msg.get("content"):
-                    yield _sse({"type": "token", "content": msg["content"]})
-                if chunk.get("done"):
-                    eval_count = chunk.get("eval_count", 0)
-                    eval_dur_ns = chunk.get("eval_duration", 1)
-                    prompt_count = chunk.get("prompt_eval_count", 0)
-                    tokens_per_sec = eval_count / (eval_dur_ns / 1e9) if eval_dur_ns else 0
-                    yield _sse(
-                        {
-                            "type": "done",
-                            "tokens_per_sec": round(tokens_per_sec, 1),
-                            "eval_count": eval_count,
-                            "prompt_count": prompt_count,
-                            "total_ms": int((time.perf_counter() - start) * 1000),
-                        }
-                    )
+        try:
+            async with client.stream(
+                "POST",
+                "/api/chat",
+                json={
+                    "model": req.model,
+                    "messages": [m.model_dump() for m in req.messages],
+                    "stream": True,
+                },
+            ) as resp:
+                async for raw in resp.aiter_lines():
+                    if not raw:
+                        continue
+                    try:
+                        chunk = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    msg = chunk.get("message", {})
+                    # Reasoning models (qwen3, deepseek-r1, etc.) stream into
+                    # `thinking` before producing `content`. Forward both so the
+                    # UI can show the model is alive instead of silently waiting.
+                    if msg.get("thinking"):
+                        yield _sse({"type": "thinking", "content": msg["thinking"]})
+                    if first_token_time is None and msg.get("content"):
+                        first_token_time = time.perf_counter()
+                        ttft_ms = int((first_token_time - start) * 1000)
+                        yield _sse({"type": "ttft", "ms": ttft_ms})
+                    if msg.get("content"):
+                        yield _sse({"type": "token", "content": msg["content"]})
+                    if chunk.get("done"):
+                        eval_count = chunk.get("eval_count", 0)
+                        # eval_duration may be 0 or missing on early stops or
+                        # malformed payloads — treat both as "no measurement".
+                        eval_dur_ns = chunk.get("eval_duration") or 0
+                        prompt_count = chunk.get("prompt_eval_count", 0)
+                        tokens_per_sec = eval_count / (eval_dur_ns / 1e9) if eval_dur_ns > 0 else 0
+                        yield _sse(
+                            {
+                                "type": "done",
+                                "tokens_per_sec": round(tokens_per_sec, 1),
+                                "eval_count": eval_count,
+                                "prompt_count": prompt_count,
+                                "total_ms": int((time.perf_counter() - start) * 1000),
+                            }
+                        )
+        except httpx.RequestError as e:
+            # Ollama unreachable or connection dropped mid-stream — surface
+            # a structured error event instead of a truncated SSE response.
+            yield _sse({"type": "error", "message": str(e)})
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 
@@ -205,13 +257,12 @@ def _sse(payload: dict[str, Any]) -> bytes:
 @app.delete("/api/models/{name:path}")
 async def delete_model(name: str) -> dict[str, Any]:
     """Delete a model from Ollama. `name` may include the tag (qwen3:14b)."""
+    name = _validate_model_name(name)
     r = await client.request("DELETE", "/api/delete", json={"model": name})
     if r.status_code != 200:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=r.status_code,
-            detail=f"Ollama returned {r.status_code}: {r.text}",
+            detail=f"Ollama returned {r.status_code}",
         )
     return {"deleted": True, "model": name}
 
@@ -223,13 +274,12 @@ async def unload_model(name: str) -> dict[str, Any]:
     Uses Ollama's documented `keep_alive: 0` idiom — a no-op generate request
     that tells the runtime to release the model immediately.
     """
+    name = _validate_model_name(name)
     r = await client.post("/api/generate", json={"model": name, "keep_alive": 0})
     if r.status_code != 200:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=r.status_code,
-            detail=f"Ollama returned {r.status_code}: {r.text}",
+            detail=f"Ollama returned {r.status_code}",
         )
     return {"unloaded": True, "model": name}
 

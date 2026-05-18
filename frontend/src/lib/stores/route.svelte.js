@@ -8,7 +8,6 @@ const PAGES = [
   'system',
   'design',
   'labs',
-  'scope-lab',
   'about',
   'settings'
 ];

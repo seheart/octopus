@@ -12,7 +12,6 @@
   import SystemPage from './lib/pages/SystemPage.svelte';
   import DesignPage from './lib/pages/DesignPage.svelte';
   import LabsPage from './lib/pages/LabsPage.svelte';
-  import ScopeLabPage from './lib/pages/ScopeLabPage.svelte';
   import AboutPage from './lib/pages/AboutPage.svelte';
   import SettingsPage from './lib/pages/SettingsPage.svelte';
   import { route } from './lib/stores/route.svelte.js';
@@ -49,8 +48,6 @@
       <DesignPage />
     {:else if route.page === 'labs'}
       <LabsPage />
-    {:else if route.page === 'scope-lab'}
-      <ScopeLabPage />
     {:else if route.page === 'about'}
       <AboutPage />
     {:else if route.page === 'settings'}

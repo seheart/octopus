@@ -1,7 +1,6 @@
 <script>
   import OctoLogo from '../components/OctoLogo.svelte';
   import { Card, Section } from '../components/ui/index.js';
-  import { go } from '../stores/route.svelte.js';
   import {
     DARK_BG,
     LIGHT_BG,
@@ -22,34 +21,12 @@
       </p>
     </div>
 
-    <Card padding="md">
-      <button
-        onclick={() => go('scope-lab')}
-        class="w-full text-left bg-transparent border-0 p-0 cursor-pointer group"
-      >
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <div class="font-mono text-sm text-heading group-hover:text-accent transition-colors">
-              scope lab →
-            </div>
-            <div class="text-xs text-muted mt-0.5">
-              five oscilloscope visualizations: the current heartbeat plus four flowing
-              alternatives, all on the same live data.
-            </div>
-          </div>
-        </div>
-      </button>
-    </Card>
-
     <Card padding="lg">
       <Section title="dark mode · against #0a0a0a">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
           {#each darkOptions as opt (opt.hex)}
             <div class="rounded-lg border border-border overflow-hidden">
-              <div
-                class="flex items-center justify-center py-8"
-                style="background: {DARK_BG};"
-              >
+              <div class="flex items-center justify-center py-8" style="background: {DARK_BG};">
                 <OctoLogo size={64} color={opt.hex} bg={DARK_BG} />
               </div>
               <div class="px-3 py-2 bg-surface-2">
@@ -76,10 +53,7 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
           {#each lightOptions as opt (opt.hex)}
             <div class="rounded-lg border border-border overflow-hidden">
-              <div
-                class="flex items-center justify-center py-8"
-                style="background: {LIGHT_BG};"
-              >
+              <div class="flex items-center justify-center py-8" style="background: {LIGHT_BG};">
                 <OctoLogo size={64} color={opt.hex} bg={LIGHT_BG} />
               </div>
               <div class="px-3 py-2 bg-surface-2">

@@ -65,10 +65,11 @@
         <p class="text-sm text-muted mb-5 max-w-2xl">
           The full family at each mode's anchor: <span class="text-heading"
             >same saturation, same lightness within a mode; only hue varies.</span
-          > Four hues are wired as semantic tokens — <span class="text-accent">· accent · success ·
-            error · warning</span
-          > — the other six are spare voices for charts, the oscilloscope, and future roles. Any
-          new color picked must match the (S, L) profile.
+          >
+          Four hues are wired as semantic tokens —
+          <span class="text-accent">· accent · success · error · warning</span> — the other six are spare
+          voices for charts, the oscilloscope, and future roles. Any new color picked must match the (S,
+          L) profile.
         </p>
 
         <div class="space-y-6">
@@ -213,8 +214,8 @@
         <ul class="text-sm text-body space-y-1.5 list-disc pl-5">
           <li>
             Semantic accents (<Code>accent</Code>, <Code>success</Code>, <Code>error</Code>,
-            <Code>warning</Code>) share one saturation/lightness — only hue varies. New accents
-            must join the family.
+            <Code>warning</Code>) share one saturation/lightness — only hue varies. New accents must
+            join the family.
           </li>
           <li>
             Color hex values are <strong>only</strong> declared in

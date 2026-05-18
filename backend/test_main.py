@@ -3,6 +3,7 @@ import subprocess
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -545,3 +546,74 @@ def test_run_diagnostic_streams_summary(
     # Summary should reflect 1 pass and 2 fail.
     assert '"pass": 1' in body
     assert '"fail": 2' in body
+
+
+# --- Validation -------------------------------------------------------------
+
+
+def test_chat_rejects_path_traversal_in_model_name(client: TestClient) -> None:
+    """Model name containing `..` is rejected before reaching Ollama."""
+    r = client.post(
+        "/api/chat",
+        json={"model": "../etc/passwd", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 422
+
+
+def test_chat_rejects_invalid_model_name_chars(client: TestClient) -> None:
+    """Model name with spaces or control characters is rejected."""
+    r = client.post(
+        "/api/chat",
+        json={"model": "bad name", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 422
+
+
+def test_chat_rejects_invalid_role(client: TestClient) -> None:
+    """ChatMessage rejects roles outside the allowed set."""
+    r = client.post(
+        "/api/chat",
+        json={"model": "qwen3:14b", "messages": [{"role": "system_hack", "content": "x"}]},
+    )
+    assert r.status_code == 422
+
+
+def test_pull_rejects_invalid_model_name(client: TestClient) -> None:
+    r = client.post("/api/pull", json={"model": "../foo"})
+    assert r.status_code == 422
+
+
+def test_delete_model_rejects_path_traversal(client: TestClient) -> None:
+    """A `..` segment in the URL path must be rejected by the validator."""
+    # FastAPI's path converter normalises some traversal at the URL layer; the
+    # validator catches the rest.
+    r = client.delete("/api/models/foo/..%2Fbar")
+    # Either FastAPI 404s the URL or our validator rejects it — both safe.
+    assert r.status_code in (400, 404)
+
+
+def test_chat_emits_error_on_request_failure(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """If Ollama is unreachable, the stream surfaces a structured error event."""
+
+    class FailingStream:
+        def __init__(self, *_: Any, **__: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "FailingStream":
+            raise httpx.ConnectError("ollama down")
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    fake_client = MagicMock()
+    fake_client.stream = MagicMock(side_effect=lambda *a, **k: FailingStream())
+    monkeypatch.setattr(main, "client", fake_client)
+    r = client.post(
+        "/api/chat",
+        json={"model": "qwen3:14b", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 200
+    assert '"type": "error"' in r.text
+    assert "ollama down" in r.text

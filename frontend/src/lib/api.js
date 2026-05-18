@@ -64,6 +64,7 @@ export function pullModel(name, onEvent) {
       signal: ctrl.signal
     });
     if (!resp.ok) throw new Error(`pull failed: ${resp.status}`);
+    if (!resp.body) throw new Error('pull failed: empty response body');
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
@@ -102,6 +103,7 @@ export function runDiagnostic(onEvent) {
       signal: ctrl.signal
     });
     if (!resp.ok) throw new Error(`diagnostic failed: ${resp.status}`);
+    if (!resp.body) throw new Error('diagnostic failed: empty response body');
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';

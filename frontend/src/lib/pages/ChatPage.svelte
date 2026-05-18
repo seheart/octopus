@@ -98,6 +98,8 @@
         signal: currentAbort.signal
       });
 
+      if (!resp.ok) throw new Error(`chat failed: ${resp.status}`);
+      if (!resp.body) throw new Error('chat failed: empty response body');
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
@@ -135,6 +137,11 @@
             };
             messages = [...messages.slice(0, -1), last];
             liveStat = last.stats;
+          } else if (evt.type === 'error') {
+            // Backend surfaces structured errors when Ollama drops mid-stream.
+            last.content = (last.content || '') + `\n\n_Error: ${evt.message}_`;
+            messages = [...messages.slice(0, -1), last];
+            warmupActive = false;
           }
         }
       }
