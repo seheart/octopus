@@ -30,11 +30,12 @@
   --text-heading: #000000;
   --muted: #6b6b6b;
   --border: #d4d2cc;
-  --accent: #000000;
-  --success: #2d7a4a;
-  --error: #b62a4a;
-  --warning: #b8740c;
-  --logo: #be185d;
+  /* Semantic family — hsl(_, 55%, 36%). Only hue varies. */
+  --accent: #298e4d; /* hue 141 */
+  --success: #298e69; /* hue 158 */
+  --error: #8e2929; /* hue 0 */
+  --warning: #8e6929; /* hue 38 */
+  --logo: #86298e; /* family magenta — hue 295 */
 
   /* Oscilloscope phosphor palette — intentionally theme-independent. */
   --scope-bg: #000000;
@@ -50,11 +51,12 @@ html.dark {
   --text-heading: #fafafa;
   --muted: #777777;
   --border: #2a2a2a;
-  --accent: #4ade80;
-  --success: #5fc88a;
-  --error: #ef5d6e;
-  --warning: #f5b045;
-  --logo: #22d3ee;
+  /* Semantic family — hsl(_, 73%, 58%). Only hue varies. */
+  --accent: #46e27c; /* hue 141 */
+  --success: #46e2a9; /* hue 158 */
+  --error: #e24646; /* hue 0 */
+  --warning: #e2a946; /* hue 38 */
+  --logo: #d546e2; /* family magenta — hue 295 */
 }
 
 html,

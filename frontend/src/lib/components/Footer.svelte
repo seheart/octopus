@@ -37,6 +37,7 @@
     { id: 'system', label: 'system' },
     { id: 'storage', label: 'storage' },
     { id: 'diagnostic', label: 'diagnostic' },
+    { id: 'design', label: 'design' },
     { id: 'labs', label: 'labs' }
   ];
 

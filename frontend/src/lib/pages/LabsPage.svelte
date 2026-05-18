@@ -1,6 +1,7 @@
 <script>
   import OctoLogo from '../components/OctoLogo.svelte';
   import { Card, Section } from '../components/ui/index.js';
+  import { go } from '../stores/route.svelte.js';
   import {
     DARK_BG,
     LIGHT_BG,
@@ -20,6 +21,25 @@
         is honest — your current theme doesn't change what you see here.
       </p>
     </div>
+
+    <Card padding="md">
+      <button
+        onclick={() => go('scope-lab')}
+        class="w-full text-left bg-transparent border-0 p-0 cursor-pointer group"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <div class="font-mono text-sm text-heading group-hover:text-accent transition-colors">
+              scope lab →
+            </div>
+            <div class="text-xs text-muted mt-0.5">
+              five oscilloscope visualizations: the current heartbeat plus four flowing
+              alternatives, all on the same live data.
+            </div>
+          </div>
+        </div>
+      </button>
+    </Card>
 
     <Card padding="lg">
       <Section title="dark mode · against #0a0a0a">
@@ -85,11 +105,12 @@
       <Section title="status">
         <div class="text-sm text-muted space-y-1 mt-2 font-mono">
           <div>
-            dark · <span class="text-heading">plasma #22D3EE</span>
+            dark · <span class="text-heading">magenta #D546E2</span>
           </div>
           <div>
-            light · <span class="text-heading">magenta #BE185D</span>
+            light · <span class="text-heading">magenta #86298E</span>
           </div>
+          <div class="text-xs text-muted mt-1">in-family with the design palette</div>
         </div>
       </Section>
     </Card>

@@ -1,19 +1,28 @@
 <script>
   import { Button, Card, Code, Section, Tag, StatRow } from '../components/ui/index.js';
   import { theme, setTheme } from '../stores/theme.svelte.js';
+  import {
+    DARK_BG,
+    LIGHT_BG,
+    DARK_PROFILE,
+    LIGHT_PROFILE,
+    darkFamily,
+    lightFamily
+  } from './design-palette.js';
 
-  const colorTokens = [
+  const modes = [
+    { label: 'dark', bg: DARK_BG, profile: DARK_PROFILE, family: darkFamily },
+    { label: 'light', bg: LIGHT_BG, profile: LIGHT_PROFILE, family: lightFamily }
+  ];
+
+  const surfaceTokens = [
     { name: 'canvas', desc: 'page background', class: 'bg-canvas' },
     { name: 'surface', desc: 'cards, panels', class: 'bg-surface' },
     { name: 'surface-2', desc: 'nested surfaces, inputs', class: 'bg-surface-2' },
     { name: 'border', desc: 'dividers, outlines', class: 'bg-border' },
     { name: 'body', desc: 'default text', class: 'bg-body' },
     { name: 'heading', desc: 'titles, emphasis', class: 'bg-heading' },
-    { name: 'muted', desc: 'secondary text, labels', class: 'bg-muted' },
-    { name: 'accent', desc: 'links, primary action', class: 'bg-accent' },
-    { name: 'success', desc: 'positive state', class: 'bg-success' },
-    { name: 'error', desc: 'negative state, errors', class: 'bg-error' },
-    { name: 'warning', desc: 'caution state', class: 'bg-warning' }
+    { name: 'muted', desc: 'secondary text, labels', class: 'bg-muted' }
   ];
 
   const typeScale = [
@@ -50,11 +59,65 @@
       </div>
     </div>
 
-    <!-- Color tokens -->
+    <!-- The palette — both modes shown side-by-side regardless of current theme -->
     <Card padding="lg">
-      <Section title="color tokens">
+      <Section title="palette · ten hues, one tonal voice">
+        <p class="text-sm text-muted mb-5 max-w-2xl">
+          The full family at each mode's anchor: <span class="text-heading"
+            >same saturation, same lightness within a mode; only hue varies.</span
+          > Four hues are wired as semantic tokens — <span class="text-accent">· accent · success ·
+            error · warning</span
+          > — the other six are spare voices for charts, the oscilloscope, and future roles. Any
+          new color picked must match the (S, L) profile.
+        </p>
+
+        <div class="space-y-6">
+          {#each modes as mode (mode.label)}
+            <div>
+              <div class="flex items-baseline gap-3 mb-2 flex-wrap">
+                <span class="font-mono text-sm text-heading">{mode.label}</span>
+                <span class="font-mono text-xs text-muted">{mode.profile}</span>
+                <span class="font-mono text-xs text-muted">against {mode.bg}</span>
+              </div>
+              <div class="rounded-lg border border-border overflow-hidden">
+                <div
+                  class="grid grid-cols-5 lg:grid-cols-10 gap-2 p-3"
+                  style="background: {mode.bg};"
+                >
+                  {#each mode.family as c (c.name)}
+                    <div
+                      class="aspect-square rounded-md"
+                      style="background: {c.hex};"
+                      title="{c.name} · {c.hue} · {c.hex}"
+                    ></div>
+                  {/each}
+                </div>
+                <div class="grid grid-cols-5 lg:grid-cols-10 bg-surface-2 border-t border-border">
+                  {#each mode.family as c (c.name)}
+                    <div class="px-2 py-2 border-r border-border last:border-r-0 min-w-0">
+                      <div class="font-mono text-xs text-heading truncate">{c.name}</div>
+                      <div class="font-mono text-[10px] text-muted">{c.hue}</div>
+                      <div class="font-mono text-[10px] text-muted truncate">{c.hex}</div>
+                      {#if c.role}
+                        <div class="font-mono text-[10px] text-accent mt-0.5 truncate">
+                          · {c.role}
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </Section>
+    </Card>
+
+    <!-- Surface / text tokens -->
+    <Card padding="lg">
+      <Section title="surface &amp; text tokens">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {#each colorTokens as t (t.name)}
+          {#each surfaceTokens as t (t.name)}
             <div class="flex items-center gap-3 p-2 rounded border border-border">
               <div class="w-10 h-10 rounded border border-border shrink-0 {t.class}"></div>
               <div class="min-w-0">
@@ -148,6 +211,11 @@
     <Card padding="lg">
       <Section title="rules of the road">
         <ul class="text-sm text-body space-y-1.5 list-disc pl-5">
+          <li>
+            Semantic accents (<Code>accent</Code>, <Code>success</Code>, <Code>error</Code>,
+            <Code>warning</Code>) share one saturation/lightness — only hue varies. New accents
+            must join the family.
+          </li>
           <li>
             Color hex values are <strong>only</strong> declared in
             <Code>src/app.css</Code> (the token file).
