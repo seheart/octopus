@@ -2,6 +2,10 @@
 
 Local Ollama model lab — chat alongside live telemetry (tokens/sec, TTFT, GPU/VRAM, loaded models).
 
+![Octopus models view — every installed Ollama model with live token/s activity](docs/images/models.png)
+
+Chat page layout:
+
 ```
 ┌──────────────────────────────┬──────────────────┐
 │ chat (streaming)             │ last response    │
