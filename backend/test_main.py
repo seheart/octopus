@@ -241,6 +241,15 @@ def test_physical_ram_bytes_is_positive() -> None:
     assert main._physical_ram_bytes() > 0
 
 
+def test_cpu_model_and_uptime_resolve() -> None:
+    """CPU model + uptime resolve on the platforms the suite runs on
+    (Linux via /proc, macOS via sysctl) — never the bare 'unknown'/None."""
+    assert main._cpu_model() != "unknown"
+    up = main._uptime_seconds()
+    assert up is not None
+    assert up > 0
+
+
 def test_gpu_endpoint_when_nvidia_smi_missing(
     monkeypatch: pytest.MonkeyPatch, client: TestClient
 ) -> None:

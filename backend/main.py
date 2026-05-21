@@ -141,23 +141,49 @@ def _physical_ram_bytes() -> int:
     return page * pages if page > 0 and pages > 0 else 0
 
 
-@app.get("/api/host")
-def host_info() -> dict[str, Any]:
-    """Host system info (CPU, RAM, disk) parsed from /proc + shutil."""
-    info: dict[str, Any] = {}
-
-    # CPU
-    cpu_model = "unknown"
-    cpu_count = os.cpu_count() or 0
+def _cpu_model() -> str:
+    """CPU model name — /proc/cpuinfo on Linux, sysctl on macOS."""
     try:
         with open("/proc/cpuinfo") as f:
             for line in f:
                 if line.startswith("model name"):
-                    cpu_model = line.split(":", 1)[1].strip()
-                    break
+                    return line.split(":", 1)[1].strip()
     except OSError:
         pass
-    info["cpu"] = {"model": cpu_model, "cores": cpu_count}
+    try:
+        out = subprocess.check_output(
+            ["sysctl", "-n", "machdep.cpu.brand_string"], text=True, timeout=2
+        ).strip()
+        if out:
+            return out
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return "unknown"
+
+
+def _uptime_seconds() -> float | None:
+    """System uptime in seconds — /proc/uptime on Linux, sysctl on macOS."""
+    try:
+        with open("/proc/uptime") as f:
+            return float(f.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        out = subprocess.check_output(["sysctl", "-n", "kern.boottime"], text=True, timeout=2)
+        m = re.search(r"sec\s*=\s*(\d+)", out)
+        if m:
+            return max(0.0, time.time() - int(m.group(1)))
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return None
+
+
+@app.get("/api/host")
+def host_info() -> dict[str, Any]:
+    """Host system info — CPU, RAM, disk, uptime — from /proc, sysctl, shutil."""
+    info: dict[str, Any] = {}
+
+    info["cpu"] = {"model": _cpu_model(), "cores": os.cpu_count() or 0}
 
     # Memory — /proc/meminfo gives total + live usage on Linux. Where /proc
     # isn't available (e.g. a macOS dev host) fall back to sysconf: that
@@ -197,12 +223,7 @@ def host_info() -> dict[str, Any]:
     except OSError:
         info["disk"] = None
 
-    # Uptime (best-effort)
-    try:
-        with open("/proc/uptime") as f:
-            info["uptime_seconds"] = float(f.read().split()[0])
-    except (OSError, ValueError):
-        info["uptime_seconds"] = None
+    info["uptime_seconds"] = _uptime_seconds()
 
     return info
 

@@ -127,17 +127,28 @@
           <div class="text-muted text-sm">loading…</div>
         {:else}
           <div class="space-y-4">
-            <!-- CPU + uptime row -->
+            <!-- CPU + uptime row. Each field renders only when known, so a
+                 platform that can't report one shows a clean card, not "—". -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div class="text-xs text-muted font-mono uppercase mb-1">cpu</div>
-                <div class="text-sm text-heading font-mono truncate">{host.cpu?.model || '—'}</div>
-                <div class="text-xs text-muted font-mono mt-0.5">{host.cpu?.cores || 0} cores</div>
+                {#if host.cpu?.model && host.cpu.model !== 'unknown'}
+                  <div class="text-sm text-heading font-mono truncate">{host.cpu.model}</div>
+                  <div class="text-xs text-muted font-mono mt-0.5">
+                    {host.cpu?.cores || 0} cores
+                  </div>
+                {:else}
+                  <div class="text-sm text-heading font-mono">{host.cpu?.cores || 0} cores</div>
+                {/if}
               </div>
-              <div>
-                <div class="text-xs text-muted font-mono uppercase mb-1">uptime</div>
-                <div class="text-sm text-heading font-mono">{fmtUptime(host.uptime_seconds)}</div>
-              </div>
+              {#if host.uptime_seconds !== null && host.uptime_seconds !== undefined}
+                <div>
+                  <div class="text-xs text-muted font-mono uppercase mb-1">uptime</div>
+                  <div class="text-sm text-heading font-mono">
+                    {fmtUptime(host.uptime_seconds)}
+                  </div>
+                </div>
+              {/if}
             </div>
 
             <!-- Memory bar — live usage on Linux; total-only where /proc
