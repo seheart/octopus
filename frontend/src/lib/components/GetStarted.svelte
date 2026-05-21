@@ -110,14 +110,14 @@
       </div>
       {#if !hasModels}
         {#if modelStepLocked}
-          <p class="text-xs text-muted">Start Ollama first, then pull your first model here.</p>
+          <p class="text-xs text-muted">Start Ollama first, then add your first model here.</p>
         {:else}
           <p class="text-xs text-muted">
-            Pull a fast starter (~2 GB) — a good first model on modest hardware.
+            Add a fast starter (~2 GB) — a good first model on modest hardware.
           </p>
           <div class="flex items-center gap-3">
             <Button variant="primary" size="sm" onclick={pullStarter}>
-              Pull {STARTER_MODEL}
+              Add {STARTER_MODEL}
             </Button>
             <button
               onclick={() => go('pull')}

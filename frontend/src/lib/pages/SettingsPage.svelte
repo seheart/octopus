@@ -22,9 +22,15 @@
   ];
 
   const morePages = [
-    { id: 'design', label: 'Design system', desc: 'Tokens, primitives, component examples' },
     { id: 'roadmap', label: 'Roadmap', desc: 'What is shipped and what is next' },
-    { id: 'about', label: 'About', desc: 'What this is and why it exists' }
+    { id: 'about', label: 'About', desc: 'What this is and why it exists' },
+    { id: 'design', label: 'Design system', desc: 'Tokens, primitives, component examples' },
+    {
+      id: 'diagnostic',
+      label: 'Diagnostic',
+      desc: 'Code health & runtime checks — for contributors'
+    },
+    { id: 'labs', label: 'Labs', desc: 'Logo color experiments' }
   ];
 </script>
 

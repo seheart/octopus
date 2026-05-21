@@ -20,7 +20,7 @@ describe('GetStarted', () => {
       props: { ollamaReachable: false, hasModels: false }
     });
     // No pull button while Ollama is down — a pull needs the daemon running.
-    expect(queryByText('Pull llama3.2:3b')).toBeNull();
+    expect(queryByText('Add llama3.2:3b')).toBeNull();
     expect(getByText(/Start Ollama first/)).toBeTruthy();
   });
 
@@ -30,7 +30,7 @@ describe('GetStarted', () => {
     });
     expect(getByText('Ollama is running')).toBeTruthy();
     expect(getByText('No models yet')).toBeTruthy();
-    expect(getByText('Pull llama3.2:3b')).toBeTruthy();
+    expect(getByText('Add llama3.2:3b')).toBeTruthy();
     // Step 1 done — its serve command is no longer shown.
     expect(container.textContent).not.toContain('$ ollama serve');
   });
@@ -41,14 +41,14 @@ describe('GetStarted', () => {
     });
     expect(getByText('Ollama is running')).toBeTruthy();
     expect(getByText('A model is installed')).toBeTruthy();
-    expect(queryByText('Pull llama3.2:3b')).toBeNull();
+    expect(queryByText('Add llama3.2:3b')).toBeNull();
   });
 
-  it('"Pull llama3.2:3b" seeds the pull and routes to the pull page', async () => {
+  it('"Add llama3.2:3b" seeds the pull and routes to the pull page', async () => {
     const { getByText } = render(GetStarted, {
       props: { ollamaReachable: true, hasModels: false }
     });
-    await fireEvent.click(getByText('Pull llama3.2:3b'));
+    await fireEvent.click(getByText('Add llama3.2:3b'));
     expect(route.page).toBe('pull');
     expect(consumePendingPull()).toBe('llama3.2:3b');
   });

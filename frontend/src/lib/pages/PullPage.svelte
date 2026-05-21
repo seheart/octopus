@@ -210,15 +210,12 @@
       <h1 class="text-2xl font-bold text-heading">Add a model</h1>
     </div>
     <p class="text-sm text-muted max-w-2xl">
-      Pulls from Ollama's registry. Type a model name (e.g. <code
-        class="font-mono text-body bg-surface-2 px-1 rounded">qwen3:8b</code
-      >) or pick from the suggestions below. Names follow
-      <code class="font-mono text-body bg-surface-2 px-1 rounded">family[:tag]</code> — leave the tag
-      off for the default.
+      Each suggestion below says what it's good at and whether it'll run well on this machine.
+      Adding a model downloads it once — after that it works offline, with no account needed.
     </p>
 
     <Card padding="lg">
-      <Section title="pull by name">
+      <Section title="add by name">
         <div class="flex gap-2 items-center mb-3">
           <input
             type="text"
@@ -232,7 +229,7 @@
             <Button variant="secondary" onclick={cancelPull}>cancel</Button>
           {:else}
             <Button variant="primary" onclick={() => startPull()} disabled={!pullName.trim()}>
-              pull
+              Add
             </Button>
           {/if}
         </div>
@@ -322,7 +319,7 @@
                     disabled={pulling}
                     class="text-xs font-mono text-accent hover:underline disabled:opacity-40 disabled:no-underline"
                   >
-                    pull this →
+                    Add →
                   </button>
                 {/if}
               </div>

@@ -63,10 +63,10 @@
   let inputEl;
 
   const examplePrompts = [
-    'Explain async/await in JavaScript with a simple example.',
-    'Write a Python function that returns the n-th Fibonacci number, memoized.',
-    'What are three good system prompts for code review?',
-    'Summarize the difference between SQLite WAL and rollback journal modes.'
+    'Explain how the internet works, in plain language.',
+    'Give me a simple 5-day dinner plan for two.',
+    'Help me write a friendly out-of-office email.',
+    'Tell me three surprising facts about octopuses.'
   ];
 
   onMount(async () => {
