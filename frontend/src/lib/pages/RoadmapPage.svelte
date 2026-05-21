@@ -68,6 +68,12 @@
       detail:
         'Standard chat affordances. Regenerate is the cheapest win (rerun last assistant message); edit + branch are bigger lifts that touch persistence.',
       size: 'S'
+    },
+    {
+      title: 'Type "octo" and Octopus opens',
+      detail:
+        'The shortest path from "I want to use it" to a running app: one word. Install puts an `octo` launcher on PATH; typing `octo` in any terminal starts the backend and frontend if they are not already up, then opens the browser straight to Chat — no remembering ./start.sh, no cd-ing into the repo, no localhost port to recall. Run it again when Octopus is already up and it just reopens the tab. start.sh already does most of the work; this wraps it as a named, on-PATH command that behaves the same on Linux and macOS.',
+      size: 'S'
     }
   ];
 
