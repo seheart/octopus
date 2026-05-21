@@ -72,15 +72,21 @@
       class="ml-auto hidden md:flex items-center gap-3 text-xs text-muted"
       aria-label="System telemetry"
     >
-      <span
-        class="whitespace-nowrap cursor-help"
-        title="Models held in memory right now, warmed up and ready to respond."
-      >
-        <span class="text-heading">{loaded.length}</span>
-        {loaded.length === 1 ? 'model' : 'models'} loaded
-      </span>
+      <!-- Only shown once a model is actually in memory — a persistent
+           "0 models loaded" reads like an error to a first-time user. -->
+      {#if loaded.length > 0}
+        <span
+          class="whitespace-nowrap cursor-help"
+          title="Models held in memory right now, warmed up and ready to respond."
+        >
+          <span class="text-heading">{loaded.length}</span>
+          {loaded.length === 1 ? 'model' : 'models'} loaded
+        </span>
+      {/if}
       {#if primaryGpu}
-        <span aria-hidden="true" class="opacity-50">·</span>
+        {#if loaded.length > 0}
+          <span aria-hidden="true" class="opacity-50">·</span>
+        {/if}
         <span
           class="flex items-center gap-2 whitespace-nowrap cursor-help"
           title="GPU video memory in use by loaded models, out of the total available."

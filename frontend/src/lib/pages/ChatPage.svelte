@@ -315,9 +315,9 @@
               </div>
             {:else}
               <div class="text-center space-y-2">
-                <h2 class="text-xl font-bold text-heading">pick a model · ask anything</h2>
+                <h2 class="text-xl font-bold text-heading">Ask your model anything</h2>
                 <p class="text-sm text-muted">
-                  Stream tokens with live timing. Stats appear in the sidebar.
+                  Type a question below — the answer appears here as it's written.
                 </p>
               </div>
               <div class="space-y-2">
@@ -429,113 +429,118 @@
     </div>
   </main>
 
-  <!-- Telemetry sidebar -->
-  <aside
-    class="w-80 border-l border-border bg-surface overflow-y-auto p-4 text-sm space-y-5 font-mono hidden lg:block"
-  >
-    <section>
-      <h2 class="text-xs uppercase tracking-wider text-muted mb-2">last response</h2>
-      {#if liveStat}
-        <div class="space-y-1">
-          <div class="flex justify-between">
-            <span
-              class="text-muted cursor-help"
-              title="How fast the model writes — tokens generated per second. Higher is faster."
-              >tokens/sec</span
-            ><span class="text-accent">{liveStat.tokens_per_sec ?? '–'}</span>
+  <!-- Telemetry sidebar — appears once there's a conversation, so a
+       first-time user isn't greeted by panels of empty stats. -->
+  {#if messages.length > 0}
+    <aside
+      class="w-80 border-l border-border bg-surface overflow-y-auto p-4 text-sm space-y-5 font-mono hidden lg:block"
+    >
+      <section>
+        <h2 class="text-xs uppercase tracking-wider text-muted mb-2">last response</h2>
+        {#if liveStat}
+          <div class="space-y-1">
+            <div class="flex justify-between">
+              <span
+                class="text-muted cursor-help"
+                title="How fast the model writes — tokens generated per second. Higher is faster."
+                >tokens/sec</span
+              ><span class="text-accent">{liveStat.tokens_per_sec ?? '–'}</span>
+            </div>
+            <div class="flex justify-between">
+              <span
+                class="text-muted cursor-help"
+                title="Time to first token — the pause before the reply starts. Lower feels snappier."
+                >TTFT</span
+              ><span>{liveStat.ttft_ms ?? '–'}ms</span>
+            </div>
+            <div class="flex justify-between">
+              <span
+                class="text-muted cursor-help"
+                title="Tokens are chunks of text — roughly ¾ of a word each. This is how many the reply used."
+                >tokens</span
+              ><span>{liveStat.eval_count ?? '–'}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted cursor-help" title="Total time to produce the full reply."
+                >total</span
+              ><span>{liveStat.total_ms ? (liveStat.total_ms / 1000).toFixed(1) + 's' : '–'}</span>
+            </div>
           </div>
-          <div class="flex justify-between">
-            <span
-              class="text-muted cursor-help"
-              title="Time to first token — the pause before the reply starts. Lower feels snappier."
-              >TTFT</span
-            ><span>{liveStat.ttft_ms ?? '–'}ms</span>
-          </div>
-          <div class="flex justify-between">
-            <span
-              class="text-muted cursor-help"
-              title="Tokens are chunks of text — roughly ¾ of a word each. This is how many the reply used."
-              >tokens</span
-            ><span>{liveStat.eval_count ?? '–'}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-muted cursor-help" title="Total time to produce the full reply."
-              >total</span
-            ><span>{liveStat.total_ms ? (liveStat.total_ms / 1000).toFixed(1) + 's' : '–'}</span>
-          </div>
-        </div>
-      {:else}
-        <div class="text-muted text-xs">no response yet</div>
-      {/if}
-    </section>
+        {:else}
+          <div class="text-muted text-xs">no response yet</div>
+        {/if}
+      </section>
 
-    <section>
-      <h2
-        class="text-xs uppercase tracking-wider text-muted mb-2 cursor-help"
-        title="Models held in your GPU's memory right now — warmed up and quick to answer."
-      >
-        loaded in vram
-      </h2>
-      {#if loaded.length === 0}
-        <div class="text-muted text-xs">none</div>
-      {:else}
-        <div class="space-y-2">
-          {#each loaded as m (m.name)}
-            <div class="bg-surface-2 rounded p-2 border border-border">
-              <div class="text-body text-xs truncate">{m.name}</div>
-              <div class="flex justify-between text-xs text-muted mt-1">
-                <span>{fmtBytes(m.size_vram)}</span>
-                <span>{fmtParams(m.details?.parameter_size)}</span>
+      <section>
+        <h2
+          class="text-xs uppercase tracking-wider text-muted mb-2 cursor-help"
+          title="Models held in your GPU's memory right now — warmed up and quick to answer."
+        >
+          loaded in vram
+        </h2>
+        {#if loaded.length === 0}
+          <div class="text-muted text-xs">none</div>
+        {:else}
+          <div class="space-y-2">
+            {#each loaded as m (m.name)}
+              <div class="bg-surface-2 rounded p-2 border border-border">
+                <div class="text-body text-xs truncate">{m.name}</div>
+                <div class="flex justify-between text-xs text-muted mt-1">
+                  <span>{fmtBytes(m.size_vram)}</span>
+                  <span>{fmtParams(m.details?.parameter_size)}</span>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </section>
+
+      <section>
+        <h2
+          class="text-xs uppercase tracking-wider text-muted mb-2 cursor-help"
+          title="Your graphics card — local models do their heavy math here."
+        >
+          gpu
+        </h2>
+        {#if !gpu || !gpu.available}
+          <div class="text-muted text-xs">not available</div>
+        {:else}
+          {#each gpu.gpus as g (g.name)}
+            <div class="space-y-1.5">
+              <div class="text-body text-xs truncate">{g.name}</div>
+              <div>
+                <div class="flex justify-between text-xs mb-0.5">
+                  <span class="text-muted">vram</span>
+                  <span
+                    >{(g.memory_used_mb / 1024).toFixed(1)} / {(g.memory_total_mb / 1024).toFixed(
+                      0
+                    )} GB</span
+                  >
+                </div>
+                <div class="h-1.5 bg-surface-2 rounded overflow-hidden">
+                  <div
+                    class="h-full bg-accent"
+                    style="width: {((g.memory_used_mb / g.memory_total_mb) * 100).toFixed(1)}%"
+                  ></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-0.5">
+                  <span class="text-muted">util</span>
+                  <span>{g.utilization_pct}%</span>
+                </div>
+                <div class="h-1.5 bg-surface-2 rounded overflow-hidden">
+                  <div class="h-full bg-accent" style="width: {g.utilization_pct}%"></div>
+                </div>
+              </div>
+              <div class="flex justify-between text-xs">
+                <span class="text-muted">temp</span>
+                <span>{g.temp_c}°C</span>
               </div>
             </div>
           {/each}
-        </div>
-      {/if}
-    </section>
-
-    <section>
-      <h2
-        class="text-xs uppercase tracking-wider text-muted mb-2 cursor-help"
-        title="Your graphics card — local models do their heavy math here."
-      >
-        gpu
-      </h2>
-      {#if !gpu || !gpu.available}
-        <div class="text-muted text-xs">not available</div>
-      {:else}
-        {#each gpu.gpus as g (g.name)}
-          <div class="space-y-1.5">
-            <div class="text-body text-xs truncate">{g.name}</div>
-            <div>
-              <div class="flex justify-between text-xs mb-0.5">
-                <span class="text-muted">vram</span>
-                <span
-                  >{(g.memory_used_mb / 1024).toFixed(1)} / {(g.memory_total_mb / 1024).toFixed(0)} GB</span
-                >
-              </div>
-              <div class="h-1.5 bg-surface-2 rounded overflow-hidden">
-                <div
-                  class="h-full bg-accent"
-                  style="width: {((g.memory_used_mb / g.memory_total_mb) * 100).toFixed(1)}%"
-                ></div>
-              </div>
-            </div>
-            <div>
-              <div class="flex justify-between text-xs mb-0.5">
-                <span class="text-muted">util</span>
-                <span>{g.utilization_pct}%</span>
-              </div>
-              <div class="h-1.5 bg-surface-2 rounded overflow-hidden">
-                <div class="h-full bg-accent" style="width: {g.utilization_pct}%"></div>
-              </div>
-            </div>
-            <div class="flex justify-between text-xs">
-              <span class="text-muted">temp</span>
-              <span>{g.temp_c}°C</span>
-            </div>
-          </div>
-        {/each}
-      {/if}
-    </section>
-  </aside>
+        {/if}
+      </section>
+    </aside>
+  {/if}
 </div>

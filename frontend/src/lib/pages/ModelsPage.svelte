@@ -114,7 +114,7 @@
         {loaded.length === 1 ? 'model' : 'models'} in vram
       </div>
       <div class="text-[10px] font-mono text-muted opacity-70 mt-0.5">
-        all Ollama clients · spikes per request
+        each spike is a model writing text — live, from here or any Ollama app
       </div>
     </div>
     <div class="flex-1 min-h-0">
