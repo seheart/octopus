@@ -3,7 +3,7 @@
   import { route, go } from '../stores/route.svelte.js';
   import { connection, markOk, markFail } from '../stores/connection.svelte.js';
   import { onMount, onDestroy } from 'svelte';
-  import { getModels } from '../api.js';
+  import { getModels, getOllamaInfo } from '../api.js';
 
   let modelCount = $state(0);
   /** @type {ReturnType<typeof setInterval> | undefined} */
@@ -11,15 +11,17 @@
 
   async function check() {
     try {
-      const m = await getModels();
-      modelCount = m.length;
-      markOk();
+      // /api/ollama answers even when Ollama is down, so this rejects only
+      // when the *backend* is unreachable — exactly the markFail() case.
+      const [info, models] = await Promise.all([getOllamaInfo(), getModels()]);
+      modelCount = models.length;
+      markOk(info.reachable);
     } catch (_e) {
       markFail();
     }
   }
 
-  const connected = $derived(connection.ok);
+  const ollamaUp = $derived(connection.backend && connection.ollama);
 
   onMount(() => {
     check();
@@ -60,14 +62,14 @@
     <div class="flex items-center gap-3 md:order-1">
       <span
         class="flex items-center gap-1.5 whitespace-nowrap"
-        title={connected ? 'Ollama connected' : 'Ollama unreachable'}
+        title={ollamaUp ? 'Ollama connected' : 'Ollama unreachable'}
       >
         <span
-          class="inline-block w-2 h-2 rounded-full {connected ? 'bg-success' : 'bg-error'}"
+          class="inline-block w-2 h-2 rounded-full {ollamaUp ? 'bg-success' : 'bg-error'}"
           aria-hidden="true"
         ></span>
-        <span class={connected ? 'text-success' : 'text-error'}>
-          {connected ? 'ollama' : 'ollama offline'}
+        <span class={ollamaUp ? 'text-success' : 'text-error'}>
+          {ollamaUp ? 'ollama' : 'ollama offline'}
         </span>
       </span>
       <span class="text-muted hidden sm:inline" aria-hidden="true">·</span>

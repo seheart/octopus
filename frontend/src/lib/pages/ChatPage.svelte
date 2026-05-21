@@ -1,12 +1,15 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { getModels, getLoaded, getGpu, fmtBytes, fmtParams } from '../api.js';
+  import { getModels, getLoaded, getGpu, getOllamaInfo, fmtBytes, fmtParams } from '../api.js';
   import { selectedModel, setModel, consumePendingPrompt } from '../stores/model.svelte.js';
   import { recordToken } from '../stores/activity.svelte.js';
   import { renderMarkdown } from '../markdown.js';
   import { Button } from '../components/ui/index.js';
+  import GetStarted from '../components/GetStarted.svelte';
 
   let models = $state([]);
+  // Whether `ollama serve` is up — drives the Get Started card on first run.
+  let ollamaReachable = $state(true);
   let messages = $state([]);
   let input = $state('');
   let streaming = $state(false);
@@ -63,9 +66,13 @@
   }
 
   async function refresh() {
-    const [l, g] = await Promise.allSettled([getLoaded(), getGpu()]);
+    const [l, g, o] = await Promise.allSettled([getLoaded(), getGpu(), getOllamaInfo()]);
     if (l.status === 'fulfilled') loaded = l.value;
     if (g.status === 'fulfilled') gpu = g.value;
+    if (o.status === 'fulfilled') ollamaReachable = o.value.reachable;
+    // While the user has no models, keep re-detecting so the Get Started
+    // card checks itself off the moment a pull finishes.
+    if (models.length === 0) loadModels();
   }
 
   async function send(prompt = input) {
@@ -229,25 +236,31 @@
       {#if messages.length === 0}
         <div class="h-full flex items-center justify-center">
           <div class="max-w-md w-full space-y-6">
-            <div class="text-center space-y-2">
-              <h2 class="text-xl font-bold text-heading">pick a model · ask anything</h2>
-              <p class="text-sm text-muted">
-                Stream tokens with live timing. Stats appear in the sidebar.
-              </p>
-            </div>
-            <div class="space-y-2">
-              <div class="text-xs text-muted font-mono uppercase tracking-wider">
-                try one of these
+            {#if models.length === 0}
+              <!-- Nothing to chat with yet — guide the user instead of
+                   showing example prompts that can't be sent. -->
+              <GetStarted {ollamaReachable} hasModels={false} />
+            {:else}
+              <div class="text-center space-y-2">
+                <h2 class="text-xl font-bold text-heading">pick a model · ask anything</h2>
+                <p class="text-sm text-muted">
+                  Stream tokens with live timing. Stats appear in the sidebar.
+                </p>
               </div>
-              {#each examplePrompts as p (p)}
-                <button
-                  onclick={() => useExample(p)}
-                  class="block w-full text-left text-sm bg-surface border border-border rounded p-2.5 hover:border-accent hover:bg-surface-2 transition-colors text-body"
-                >
-                  {p}
-                </button>
-              {/each}
-            </div>
+              <div class="space-y-2">
+                <div class="text-xs text-muted font-mono uppercase tracking-wider">
+                  try one of these
+                </div>
+                {#each examplePrompts as p (p)}
+                  <button
+                    onclick={() => useExample(p)}
+                    class="block w-full text-left text-sm bg-surface border border-border rounded p-2.5 hover:border-accent hover:bg-surface-2 transition-colors text-body"
+                  >
+                    {p}
+                  </button>
+                {/each}
+              </div>
+            {/if}
           </div>
         </div>
       {/if}
@@ -319,10 +332,12 @@
           bind:this={inputEl}
           bind:value={input}
           onkeydown={onKey}
-          placeholder="message {selectedModel.value || '…'}"
+          placeholder={models.length === 0
+            ? 'pull a model to start chatting'
+            : `message ${selectedModel.value || '…'}`}
           rows="2"
           class="flex-1 bg-surface-2 border border-border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-accent text-body"
-          disabled={streaming}
+          disabled={streaming || models.length === 0}
         ></textarea>
         {#if streaming}
           <Button variant="danger" size="lg" onclick={stop} ariaLabel="Stop generation">

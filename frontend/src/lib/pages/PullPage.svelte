@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { getModels, pullModel } from '../api.js';
   import { go } from '../stores/route.svelte.js';
-  import { setModel, selectedModel } from '../stores/model.svelte.js';
+  import { setModel, selectedModel, consumePendingPull } from '../stores/model.svelte.js';
   import { Button, Card, Section } from '../components/ui/index.js';
 
   let installed = $state([]);
@@ -111,7 +111,13 @@
     }
   }
 
-  onMount(refresh);
+  onMount(async () => {
+    await refresh();
+    // A fresh user who clicked "Pull <model>" on the Get Started card lands
+    // here with the download already kicked off — no extra click needed.
+    const seed = consumePendingPull();
+    if (seed) startPull(seed);
+  });
 
   function isInstalled(name) {
     return installed.some((m) => m.name === name || m.name.startsWith(name + ':'));

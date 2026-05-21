@@ -15,6 +15,11 @@ export const selectedModel = $state({ value: read() });
 // (use setPendingPrompt / consumePendingPrompt to interact with it).
 const pendingPrompt = $state({ value: '' });
 
+// One-shot pull seed — set by the Get Started card's "Pull <model>" button,
+// consumed by PullPage on mount so a fresh user lands on the pull page with
+// the download already running. Same lifecycle as pendingPrompt.
+const pendingPull = $state({ value: '' });
+
 export function setModel(name) {
   selectedModel.value = name;
   try {
@@ -31,5 +36,15 @@ export function setPendingPrompt(text) {
 export function consumePendingPrompt() {
   const v = pendingPrompt.value;
   pendingPrompt.value = '';
+  return v;
+}
+
+export function setPendingPull(name) {
+  pendingPull.value = name || '';
+}
+
+export function consumePendingPull() {
+  const v = pendingPull.value;
+  pendingPull.value = '';
   return v;
 }

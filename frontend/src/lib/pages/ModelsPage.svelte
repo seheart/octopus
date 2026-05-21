@@ -3,6 +3,7 @@
   import {
     getModels,
     getLoaded,
+    getOllamaInfo,
     deleteModel,
     unloadModel,
     fmtBytes,
@@ -11,14 +12,16 @@
   } from '../api.js';
   import { go } from '../stores/route.svelte.js';
   import { setModel, selectedModel, setPendingPrompt } from '../stores/model.svelte.js';
-  import { Card } from '../components/ui/index.js';
   import { modelHints } from '../modelHints.js';
   import Oscilloscope from '../components/Oscilloscope.svelte';
+  import GetStarted from '../components/GetStarted.svelte';
 
   let models = $state([]);
   let loaded = $state([]);
   let loading = $state(true);
   let err = $state(null);
+  // Whether `ollama serve` is up — drives the Get Started card vs. the grid.
+  let ollamaReachable = $state(true);
 
   // Delete confirmation per-model name
   let confirmingDelete = $state('');
@@ -30,7 +33,7 @@
   let pollHandle;
 
   async function refresh() {
-    const [m, l] = await Promise.allSettled([getModels(), getLoaded()]);
+    const [m, l, o] = await Promise.allSettled([getModels(), getLoaded(), getOllamaInfo()]);
     if (m.status === 'fulfilled') {
       models = m.value;
       err = null;
@@ -38,6 +41,7 @@
       err = m.reason?.message || 'failed to load models';
     }
     if (l.status === 'fulfilled') loaded = l.value;
+    if (o.status === 'fulfilled') ollamaReachable = o.value.reachable;
     loading = false;
   }
 
@@ -142,18 +146,8 @@
         <div class="text-muted text-sm font-mono">loading…</div>
       {:else if err}
         <div class="text-error text-sm font-mono">error: {err}</div>
-      {:else if models.length === 0}
-        <Card>
-          <div class="text-center text-sm py-6 space-y-2">
-            <div class="text-muted">No models installed yet.</div>
-            <button
-              onclick={() => go('pull')}
-              class="text-accent hover:underline font-mono text-sm"
-            >
-              Add a model →
-            </button>
-          </div>
-        </Card>
+      {:else if !ollamaReachable || models.length === 0}
+        <GetStarted {ollamaReachable} hasModels={models.length > 0} />
       {:else}
         <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
           {#each models as m (m.name)}

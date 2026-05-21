@@ -81,14 +81,34 @@ class PullRequest(BaseModel):
 
 @app.get("/api/models")
 async def list_models() -> dict[str, Any]:
-    r = await client.get("/api/tags")
-    return r.json()  # type: ignore[no-any-return]
+    """Installed Ollama models.
+
+    Degrades to an empty list with ``ollama_reachable: false`` instead of a
+    500 when ``ollama serve`` isn't running. On a fresh install that's an
+    expected state, not a server error — the UI keys its first-run
+    onboarding off the flag.
+    """
+    try:
+        r = await client.get("/api/tags")
+    except httpx.RequestError:
+        return {"models": [], "ollama_reachable": False}
+    data: dict[str, Any] = r.json()
+    return {**data, "ollama_reachable": True}
 
 
 @app.get("/api/loaded")
 async def loaded_models() -> dict[str, Any]:
-    r = await client.get("/api/ps")
-    return r.json()  # type: ignore[no-any-return]
+    """Models currently held in VRAM.
+
+    Same graceful-degradation contract as :func:`list_models` — an
+    unreachable Ollama yields an empty list, not a 500.
+    """
+    try:
+        r = await client.get("/api/ps")
+    except httpx.RequestError:
+        return {"models": [], "ollama_reachable": False}
+    data: dict[str, Any] = r.json()
+    return {**data, "ollama_reachable": True}
 
 
 @app.get("/api/ollama")

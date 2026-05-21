@@ -41,7 +41,9 @@ def test_list_models_proxies_ollama(monkeypatch: pytest.MonkeyPatch, client: Tes
     monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(return_value=mock_resp)))
     r = client.get("/api/models")
     assert r.status_code == 200
-    assert r.json() == fake
+    body = r.json()
+    assert body["models"] == fake["models"]
+    assert body["ollama_reachable"] is True
 
 
 def test_loaded_models_proxies_ollama(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
@@ -51,7 +53,43 @@ def test_loaded_models_proxies_ollama(monkeypatch: pytest.MonkeyPatch, client: T
     monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(return_value=mock_resp)))
     r = client.get("/api/loaded")
     assert r.status_code == 200
-    assert r.json() == fake
+    body = r.json()
+    assert body["models"] == []
+    assert body["ollama_reachable"] is True
+
+
+def test_list_models_when_ollama_unreachable(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """Fresh install, `ollama serve` not running: /api/models must return an
+    empty list with ollama_reachable=false, never a 500. A new user hitting
+    a 500 here can't tell the backend is fine — only Ollama is missing."""
+
+    def raise_connect(*_: Any, **__: Any) -> None:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(side_effect=raise_connect)))
+    r = client.get("/api/models")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["models"] == []
+    assert body["ollama_reachable"] is False
+
+
+def test_loaded_models_when_ollama_unreachable(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """/api/loaded degrades the same way /api/models does."""
+
+    def raise_connect(*_: Any, **__: Any) -> None:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(side_effect=raise_connect)))
+    r = client.get("/api/loaded")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["models"] == []
+    assert body["ollama_reachable"] is False
 
 
 def test_ollama_info_when_reachable(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
