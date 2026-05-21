@@ -106,7 +106,10 @@
   <!-- LEFT: live oscilloscope, big, always visible -->
   <div class="lg:w-2/5 flex flex-col min-h-[280px] lg:min-h-0">
     <div class="mb-2 shrink-0">
-      <div class="text-xs font-mono text-muted uppercase tracking-wider">
+      <div
+        class="text-xs font-mono text-muted uppercase tracking-wider cursor-help"
+        title="A model is 'in VRAM' once it's loaded into GPU memory — Ollama keeps it warm for a few minutes after use, then frees it."
+      >
         live activity · {loaded.length}
         {loaded.length === 1 ? 'model' : 'models'} in vram
       </div>
@@ -229,22 +232,42 @@
 
               <div class="grid grid-cols-3 gap-2 text-xs font-mono">
                 <div>
-                  <div class="text-muted text-[10px] uppercase">params</div>
+                  <div
+                    class="text-muted text-[10px] uppercase cursor-help"
+                    title="Parameters, in billions — the model's size. More can mean smarter, but slower and heavier."
+                  >
+                    params
+                  </div>
                   <div class="text-body">{fmtParams(m.details?.parameter_size) || '—'}</div>
                 </div>
                 <div>
-                  <div class="text-muted text-[10px] uppercase">size</div>
+                  <div
+                    class="text-muted text-[10px] uppercase cursor-help"
+                    title="Disk space the model file takes up."
+                  >
+                    size
+                  </div>
                   <div class="text-body">{fmtBytes(m.size)}</div>
                 </div>
                 <div>
-                  <div class="text-muted text-[10px] uppercase">quant</div>
+                  <div
+                    class="text-muted text-[10px] uppercase cursor-help"
+                    title="Quantization — how compressed the weights are. Q4 = 4-bit: smaller and faster, with a slight quality tradeoff."
+                  >
+                    quant
+                  </div>
                   <div class="text-body">{m.details?.quantization_level || '—'}</div>
                 </div>
               </div>
 
               <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-border">
                 <div class="text-xs text-muted font-mono">
-                  {m.details?.family || '—'} · modified {ollamaTimeAgo(m.modified_at)}
+                  <span
+                    class="cursor-help"
+                    title="The model family this is built on (llama, gemma, qwen…). Same family, similar behaviour."
+                    >{m.details?.family || '—'}</span
+                  >
+                  · modified {ollamaTimeAgo(m.modified_at)}
                 </div>
                 {#if hints.tryPrompt}
                   <button

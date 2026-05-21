@@ -126,6 +126,21 @@ async def ollama_info() -> dict[str, Any]:
         return {"reachable": False, "version": None, "url": OLLAMA_URL}
 
 
+def _physical_ram_bytes() -> int:
+    """Total physical RAM via POSIX sysconf.
+
+    Works where ``/proc/meminfo`` doesn't (notably macOS), so model-fit
+    estimates have a RAM figure to work with. Returns 0 if the platform
+    doesn't expose it.
+    """
+    try:
+        page = os.sysconf("SC_PAGE_SIZE")
+        pages = os.sysconf("SC_PHYS_PAGES")
+    except (ValueError, OSError):
+        return 0
+    return page * pages if page > 0 and pages > 0 else 0
+
+
 @app.get("/api/host")
 def host_info() -> dict[str, Any]:
     """Host system info (CPU, RAM, disk) parsed from /proc + shutil."""
@@ -144,7 +159,10 @@ def host_info() -> dict[str, Any]:
         pass
     info["cpu"] = {"model": cpu_model, "cores": cpu_count}
 
-    # Memory
+    # Memory — /proc/meminfo gives total + live usage on Linux. Where /proc
+    # isn't available (e.g. a macOS dev host) fall back to sysconf: that
+    # still yields total physical RAM, which is what model-fit needs.
+    info["memory"] = None
     try:
         meminfo: dict[str, int] = {}
         with open("/proc/meminfo") as f:
@@ -160,7 +178,13 @@ def host_info() -> dict[str, Any]:
             "used_bytes": total - available,
         }
     except (OSError, ValueError, IndexError):
-        info["memory"] = None
+        total = _physical_ram_bytes()
+        if total:
+            info["memory"] = {
+                "total_bytes": total,
+                "available_bytes": None,
+                "used_bytes": None,
+            }
 
     # Disk (root filesystem)
     try:

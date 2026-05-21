@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -208,6 +209,36 @@ def test_host_info_returns_expected_keys(client: TestClient) -> None:
     assert "disk" in body
     assert "uptime_seconds" in body
     assert body["cpu"]["cores"] >= 1
+
+
+def test_host_memory_falls_back_to_sysconf(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """On a host without /proc (e.g. macOS), memory.total_bytes still comes
+    through via sysconf — the model-fit feature needs total RAM to work."""
+    real_open = open
+
+    def no_proc(path: Any, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(path, str) and path.startswith("/proc"):
+            raise OSError("no /proc on this host")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", no_proc)
+    # SC_PHYS_PAGES -> page count, SC_PAGE_SIZE -> page size.
+    monkeypatch.setattr(os, "sysconf", lambda name: 2000 if "PHYS" in str(name) else 4096)
+    r = client.get("/api/host")
+    assert r.status_code == 200
+    mem = r.json()["memory"]
+    assert mem is not None
+    assert mem["total_bytes"] == 4096 * 2000
+    # No live usage available off the sysconf path.
+    assert mem["available_bytes"] is None
+    assert mem["used_bytes"] is None
+
+
+def test_physical_ram_bytes_is_positive() -> None:
+    """sysconf reports real RAM on the platforms the test suite runs on."""
+    assert main._physical_ram_bytes() > 0
 
 
 def test_gpu_endpoint_when_nvidia_smi_missing(

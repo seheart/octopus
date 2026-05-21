@@ -72,13 +72,19 @@
       class="ml-auto hidden md:flex items-center gap-3 text-xs text-muted"
       aria-label="System telemetry"
     >
-      <span class="whitespace-nowrap">
+      <span
+        class="whitespace-nowrap cursor-help"
+        title="Models held in memory right now, warmed up and ready to respond."
+      >
         <span class="text-heading">{loaded.length}</span>
         {loaded.length === 1 ? 'model' : 'models'} loaded
       </span>
       {#if primaryGpu}
         <span aria-hidden="true" class="opacity-50">·</span>
-        <span class="flex items-center gap-2 whitespace-nowrap">
+        <span
+          class="flex items-center gap-2 whitespace-nowrap cursor-help"
+          title="GPU video memory in use by loaded models, out of the total available."
+        >
           <span>vram</span>
           <span class="inline-block w-20 h-1.5 bg-surface-2 rounded overflow-hidden align-middle">
             <span class="block h-full bg-accent" style="width: {vramPct.toFixed(1)}%"></span>
@@ -88,7 +94,10 @@
           </span>
         </span>
         <span aria-hidden="true" class="opacity-50">·</span>
-        <span class="whitespace-nowrap">
+        <span
+          class="whitespace-nowrap cursor-help"
+          title="GPU utilization — how busy the graphics card is, near 100% while generating."
+        >
           util <span class="text-heading">{primaryGpu.utilization_pct}%</span>
         </span>
         <span aria-hidden="true" class="opacity-50">·</span>
