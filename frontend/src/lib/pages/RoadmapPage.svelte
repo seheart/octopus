@@ -303,11 +303,11 @@
         <span class="flex-1 border-t border-dashed border-border"></span>
         <span class="text-success normal-case">Done</span>
       </div>
-      <div class="space-y-2">
+      <div class="space-y-3">
         {#each recentlyShipped as r (r.label)}
-          <div class="flex items-baseline gap-3 border-l-2 border-success pl-3 py-1">
-            <span class="text-sm font-medium text-heading shrink-0">{r.label}</span>
-            <span class="text-xs text-muted">— {r.detail}</span>
+          <div class="border-l-2 border-success pl-3 py-1">
+            <div class="text-sm font-medium text-heading">{r.label}</div>
+            <div class="text-xs text-muted leading-relaxed mt-0.5">{r.detail}</div>
           </div>
         {/each}
       </div>
