@@ -19,6 +19,12 @@
       size: 'L'
     },
     {
+      title: 'Bulletproof first run — proven rock-solid on any machine',
+      detail:
+        'First use is the only first impression — and a newcomer who knows nothing about AI must get from launch to a working chat without hitting a wall, on whatever machine they own. The onboarding groundwork is in (graceful Ollama-down handling, the Get Started card, hardware-aware model fit, the too-big-model freeze guard); this item is about proving it. Exercise every first-run state across the matrix that matters: Ollama installed or not, running or not, zero models or some, GPU or CPU-only, roomy RAM or tight, Linux or macOS, plus the awkward port-already-taken case — each ending in a friendly, expected outcome, never a dead end. Two pieces ride along: a first-time walkthrough (a short, skippable guided tour the first time Octopus opens — it names the three things that matter, start Ollama, add a model, send a message, then steps aside), and an amazing testing schema (that first-run matrix exercised in CI, so "rock-solid" is a gate and not a hope). Open sub-question, tracked under Open Questions: should Octopus ship with a base model?',
+      size: 'L'
+    },
+    {
       title: 'Real benchmark integration (Promptfoo)',
       detail:
         'Wire Promptfoo into the backend so each model can be scored against a fixed prompt suite (HumanEval-style for code models, MMLU-lite for general). Results land on the model card with a freshness timestamp.',
@@ -77,6 +83,10 @@
     {
       title: 'Multi-host: connect to remote Ollama',
       note: 'Backend hardcodes 127.0.0.1:11434 (overridable via OLLAMA_URL). Could become "saved connections" so you can flip between dev box, gaming rig, and a Mac mini. Tradeoff: settings sprawl.'
+    },
+    {
+      title: 'Should Octopus ship with a base model?',
+      note: 'A brand-new user with Ollama running but zero models still has one step before they can chat. Octopus could auto-pull a small, fast starter (llama3.2:3b, ~2 GB) on first run so "open it and get it" is literally true — chat works the moment the app loads. Against it: a multi-gigabyte download without explicit consent is presumptuous, can be slow or metered, and the Get Started card already makes adding one a single click. Middle ground: a one-tap "set me up" on first run instead of a silent auto-pull. Settle this before the first-time walkthrough is finalized — the two are intertwined.'
     }
   ];
 
