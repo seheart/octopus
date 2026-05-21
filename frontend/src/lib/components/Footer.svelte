@@ -35,12 +35,15 @@
 
   const isDark = $derived(theme.value === 'dark');
 
-  // User-facing destinations only. Contributor pages (diagnostic, design,
-  // labs) live under Settings → More so they don't confuse newcomers.
   const navItems = [
     { id: 'pull', label: 'add model' },
     { id: 'system', label: 'system' },
-    { id: 'storage', label: 'storage' }
+    { id: 'storage', label: 'storage' },
+    { id: 'roadmap', label: 'roadmap' },
+    { id: 'about', label: 'about' },
+    { id: 'design', label: 'design' },
+    { id: 'diagnostic', label: 'diagnostic' },
+    { id: 'labs', label: 'labs' }
   ];
 
   function navClass(id) {
