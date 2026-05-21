@@ -28,7 +28,7 @@
   --surface-2: #ebe8e1;
   --text: #1a1a1a;
   --text-heading: #000000;
-  --muted: #6b6b6b;
+  --muted: #636363; /* ~5.5:1 on --bg — WCAG AA (was #6b6b6b, ~4.8:1) */
   --border: #d4d2cc;
 
   /* Semantic family — hsl(_, 55%, 36%). Only hue varies. */
@@ -50,7 +50,7 @@ html.dark {
   --surface-2: #1f1f1f;
   --text: #c8c8c8;
   --text-heading: #fafafa;
-  --muted: #777777;
+  --muted: #858585; /* ~5.4:1 on --bg — WCAG AA (was #777777, ~4.4:1, below AA) */
   --border: #2a2a2a;
 
   /* Semantic family — hsl(_, 73%, 58%). Only hue varies. */
