@@ -68,6 +68,43 @@
       </p>
     </div>
 
+    <!-- Octopus vs. Ollama -->
+    <Card padding="lg">
+      <Section title="octopus vs. ollama">
+        <p class="text-sm text-body leading-relaxed mb-3">
+          A fair question — Octopus can't do anything without Ollama. The short version:
+          <strong class="text-heading"
+            >Ollama is the engine; Octopus is the cockpit you run it from.</strong
+          >
+        </p>
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-sm font-semibold text-heading mb-0.5">Ollama — the engine</h3>
+            <p class="text-sm text-muted leading-relaxed">
+              The model runtime. It downloads model weights, loads them into memory, and does the
+              actual inference. It runs headless — an API on <Code>127.0.0.1:11434</Code> plus a terminal
+              CLI (<Code>ollama run</Code>, <Code>ollama pull</Code>). No window, no chat, no
+              dashboard.
+            </p>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-heading mb-0.5">Octopus — the cockpit</h3>
+            <p class="text-sm text-muted leading-relaxed">
+              Runs no models of its own — it talks to Ollama's API. What it adds is everything
+              around the model: a real chat window, live telemetry (tokens/sec, TTFT, VRAM, GPU), a
+              Models page that says what each model is good for and whether it will run on your
+              hardware, and a guided first run. Stop Ollama and Octopus has nothing to talk to —
+              which is why it asks you to start it.
+            </p>
+          </div>
+        </div>
+        <p class="text-sm text-muted leading-relaxed mt-3">
+          The same relationship a database GUI has with the database, or a car's dashboard with its
+          engine: one does the work, the other makes it usable, visible, and safe.
+        </p>
+      </Section>
+    </Card>
+
     <!-- Why -->
     <Card padding="lg">
       <Section title="why this exists">

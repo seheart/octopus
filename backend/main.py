@@ -81,14 +81,34 @@ class PullRequest(BaseModel):
 
 @app.get("/api/models")
 async def list_models() -> dict[str, Any]:
-    r = await client.get("/api/tags")
-    return r.json()  # type: ignore[no-any-return]
+    """Installed Ollama models.
+
+    Degrades to an empty list with ``ollama_reachable: false`` instead of a
+    500 when ``ollama serve`` isn't running. On a fresh install that's an
+    expected state, not a server error — the UI keys its first-run
+    onboarding off the flag.
+    """
+    try:
+        r = await client.get("/api/tags")
+    except httpx.RequestError:
+        return {"models": [], "ollama_reachable": False}
+    data: dict[str, Any] = r.json()
+    return {**data, "ollama_reachable": True}
 
 
 @app.get("/api/loaded")
 async def loaded_models() -> dict[str, Any]:
-    r = await client.get("/api/ps")
-    return r.json()  # type: ignore[no-any-return]
+    """Models currently held in VRAM.
+
+    Same graceful-degradation contract as :func:`list_models` — an
+    unreachable Ollama yields an empty list, not a 500.
+    """
+    try:
+        r = await client.get("/api/ps")
+    except httpx.RequestError:
+        return {"models": [], "ollama_reachable": False}
+    data: dict[str, Any] = r.json()
+    return {**data, "ollama_reachable": True}
 
 
 @app.get("/api/ollama")
@@ -106,25 +126,69 @@ async def ollama_info() -> dict[str, Any]:
         return {"reachable": False, "version": None, "url": OLLAMA_URL}
 
 
-@app.get("/api/host")
-def host_info() -> dict[str, Any]:
-    """Host system info (CPU, RAM, disk) parsed from /proc + shutil."""
-    info: dict[str, Any] = {}
+def _physical_ram_bytes() -> int:
+    """Total physical RAM via POSIX sysconf.
 
-    # CPU
-    cpu_model = "unknown"
-    cpu_count = os.cpu_count() or 0
+    Works where ``/proc/meminfo`` doesn't (notably macOS), so model-fit
+    estimates have a RAM figure to work with. Returns 0 if the platform
+    doesn't expose it.
+    """
+    try:
+        page = os.sysconf("SC_PAGE_SIZE")
+        pages = os.sysconf("SC_PHYS_PAGES")
+    except (ValueError, OSError):
+        return 0
+    return page * pages if page > 0 and pages > 0 else 0
+
+
+def _cpu_model() -> str:
+    """CPU model name — /proc/cpuinfo on Linux, sysctl on macOS."""
     try:
         with open("/proc/cpuinfo") as f:
             for line in f:
                 if line.startswith("model name"):
-                    cpu_model = line.split(":", 1)[1].strip()
-                    break
+                    return line.split(":", 1)[1].strip()
     except OSError:
         pass
-    info["cpu"] = {"model": cpu_model, "cores": cpu_count}
+    try:
+        out = subprocess.check_output(
+            ["sysctl", "-n", "machdep.cpu.brand_string"], text=True, timeout=2
+        ).strip()
+        if out:
+            return out
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return "unknown"
 
-    # Memory
+
+def _uptime_seconds() -> float | None:
+    """System uptime in seconds — /proc/uptime on Linux, sysctl on macOS."""
+    try:
+        with open("/proc/uptime") as f:
+            return float(f.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        out = subprocess.check_output(["sysctl", "-n", "kern.boottime"], text=True, timeout=2)
+        m = re.search(r"sec\s*=\s*(\d+)", out)
+        if m:
+            return max(0.0, time.time() - int(m.group(1)))
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return None
+
+
+@app.get("/api/host")
+def host_info() -> dict[str, Any]:
+    """Host system info — CPU, RAM, disk, uptime — from /proc, sysctl, shutil."""
+    info: dict[str, Any] = {}
+
+    info["cpu"] = {"model": _cpu_model(), "cores": os.cpu_count() or 0}
+
+    # Memory — /proc/meminfo gives total + live usage on Linux. Where /proc
+    # isn't available (e.g. a macOS dev host) fall back to sysconf: that
+    # still yields total physical RAM, which is what model-fit needs.
+    info["memory"] = None
     try:
         meminfo: dict[str, int] = {}
         with open("/proc/meminfo") as f:
@@ -140,7 +204,13 @@ def host_info() -> dict[str, Any]:
             "used_bytes": total - available,
         }
     except (OSError, ValueError, IndexError):
-        info["memory"] = None
+        total = _physical_ram_bytes()
+        if total:
+            info["memory"] = {
+                "total_bytes": total,
+                "available_bytes": None,
+                "used_bytes": None,
+            }
 
     # Disk (root filesystem)
     try:
@@ -153,12 +223,7 @@ def host_info() -> dict[str, Any]:
     except OSError:
         info["disk"] = None
 
-    # Uptime (best-effort)
-    try:
-        with open("/proc/uptime") as f:
-            info["uptime_seconds"] = float(f.read().split()[0])
-    except (OSError, ValueError):
-        info["uptime_seconds"] = None
+    info["uptime_seconds"] = _uptime_seconds()
 
     return info
 

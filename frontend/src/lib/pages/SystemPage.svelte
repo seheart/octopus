@@ -104,9 +104,17 @@
         <Section title="inventory">
           <div class="space-y-1.5">
             <StatRow label="models installed" value={allModels.length} accent />
-            <StatRow label="total parameters" value="{totalParamsB.toFixed(1)}B" />
+            <StatRow
+              label="total parameters"
+              value="{totalParamsB.toFixed(1)}B"
+              hint="Parameters across all your models, in billions — a model's 'size'. More can mean smarter, but heavier to run."
+            />
             <StatRow label="total disk used" value={fmtBytes(totalModelBytes)} />
-            <StatRow label="loaded in vram" value="{loaded.length} ({fmtBytes(loadedVramBytes)})" />
+            <StatRow
+              label="loaded in vram"
+              value="{loaded.length} ({fmtBytes(loadedVramBytes)})"
+              hint="Models currently held in GPU memory, warmed up and ready to respond instantly."
+            />
           </div>
         </Section>
       </Card>
@@ -119,37 +127,55 @@
           <div class="text-muted text-sm">loading…</div>
         {:else}
           <div class="space-y-4">
-            <!-- CPU + uptime row -->
+            <!-- CPU + uptime row. Each field renders only when known, so a
+                 platform that can't report one shows a clean card, not "—". -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div class="text-xs text-muted font-mono uppercase mb-1">cpu</div>
-                <div class="text-sm text-heading font-mono truncate">{host.cpu?.model || '—'}</div>
-                <div class="text-xs text-muted font-mono mt-0.5">{host.cpu?.cores || 0} cores</div>
+                {#if host.cpu?.model && host.cpu.model !== 'unknown'}
+                  <div class="text-sm text-heading font-mono truncate">{host.cpu.model}</div>
+                  <div class="text-xs text-muted font-mono mt-0.5">
+                    {host.cpu?.cores || 0} cores
+                  </div>
+                {:else}
+                  <div class="text-sm text-heading font-mono">{host.cpu?.cores || 0} cores</div>
+                {/if}
               </div>
-              <div>
-                <div class="text-xs text-muted font-mono uppercase mb-1">uptime</div>
-                <div class="text-sm text-heading font-mono">{fmtUptime(host.uptime_seconds)}</div>
-              </div>
+              {#if host.uptime_seconds !== null && host.uptime_seconds !== undefined}
+                <div>
+                  <div class="text-xs text-muted font-mono uppercase mb-1">uptime</div>
+                  <div class="text-sm text-heading font-mono">
+                    {fmtUptime(host.uptime_seconds)}
+                  </div>
+                </div>
+              {/if}
             </div>
 
-            <!-- Memory bar -->
+            <!-- Memory bar — live usage on Linux; total-only where /proc
+                 isn't available and we fall back to sysconf. -->
             {#if host.memory}
               <div>
                 <div class="flex justify-between text-xs font-mono mb-0.5">
                   <span class="text-muted uppercase">memory</span>
-                  <span class="text-body">
-                    {fmtBytes(host.memory.used_bytes)} / {fmtBytes(host.memory.total_bytes)}
-                    <span class="text-muted">
-                      · {pct(host.memory.used_bytes, host.memory.total_bytes)}%
+                  {#if host.memory.used_bytes !== null}
+                    <span class="text-body">
+                      {fmtBytes(host.memory.used_bytes)} / {fmtBytes(host.memory.total_bytes)}
+                      <span class="text-muted">
+                        · {pct(host.memory.used_bytes, host.memory.total_bytes)}%
+                      </span>
                     </span>
-                  </span>
+                  {:else}
+                    <span class="text-body">{fmtBytes(host.memory.total_bytes)} total</span>
+                  {/if}
                 </div>
-                <div class="h-2 bg-surface-2 rounded overflow-hidden">
-                  <div
-                    class="h-full bg-accent transition-all"
-                    style="width: {pct(host.memory.used_bytes, host.memory.total_bytes)}%"
-                  ></div>
-                </div>
+                {#if host.memory.used_bytes !== null}
+                  <div class="h-2 bg-surface-2 rounded overflow-hidden">
+                    <div
+                      class="h-full bg-accent transition-all"
+                      style="width: {pct(host.memory.used_bytes, host.memory.total_bytes)}%"
+                    ></div>
+                  </div>
+                {/if}
               </div>
             {/if}
 
@@ -191,7 +217,12 @@
               <div class="text-heading font-mono">{g.name}</div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <div class="text-xs text-muted font-mono uppercase mb-1">vram</div>
+                  <div
+                    class="text-xs text-muted font-mono uppercase mb-1 cursor-help"
+                    title="Video memory on the GPU. A model has to fit here (or in system RAM) to run."
+                  >
+                    vram
+                  </div>
                   <div class="text-lg font-mono text-body">
                     {(g.memory_used_mb / 1024).toFixed(1)}<span class="text-muted text-sm">
                       / {(g.memory_total_mb / 1024).toFixed(0)} GB</span
@@ -205,7 +236,12 @@
                   </div>
                 </div>
                 <div>
-                  <div class="text-xs text-muted font-mono uppercase mb-1">utilization</div>
+                  <div
+                    class="text-xs text-muted font-mono uppercase mb-1 cursor-help"
+                    title="How hard the GPU is working right now — it climbs toward 100% while a model generates."
+                  >
+                    utilization
+                  </div>
                   <div class="text-lg font-mono text-body">
                     {g.utilization_pct}<span class="text-muted text-sm">%</span>
                   </div>
@@ -251,7 +287,12 @@
                 </div>
                 <div class="grid grid-cols-3 gap-3 text-xs font-mono mt-2">
                   <div>
-                    <div class="text-muted text-[10px] uppercase">vram</div>
+                    <div
+                      class="text-muted text-[10px] uppercase cursor-help"
+                      title="GPU memory this model is using while loaded."
+                    >
+                      vram
+                    </div>
                     <div class="text-body">{fmtBytes(m.size_vram)}</div>
                   </div>
                   <div>
@@ -259,7 +300,12 @@
                     <div class="text-body">{fmtBytes(m.size)}</div>
                   </div>
                   <div>
-                    <div class="text-muted text-[10px] uppercase">context</div>
+                    <div
+                      class="text-muted text-[10px] uppercase cursor-help"
+                      title="Context length — how much text (in tokens) the model can consider at once."
+                    >
+                      context
+                    </div>
                     <div class="text-body">{m.context_length || '—'}</div>
                   </div>
                 </div>

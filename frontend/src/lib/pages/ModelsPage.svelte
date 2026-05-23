@@ -3,6 +3,7 @@
   import {
     getModels,
     getLoaded,
+    getOllamaInfo,
     deleteModel,
     unloadModel,
     fmtBytes,
@@ -11,14 +12,16 @@
   } from '../api.js';
   import { go } from '../stores/route.svelte.js';
   import { setModel, selectedModel, setPendingPrompt } from '../stores/model.svelte.js';
-  import { Card } from '../components/ui/index.js';
   import { modelHints } from '../modelHints.js';
   import Oscilloscope from '../components/Oscilloscope.svelte';
+  import GetStarted from '../components/GetStarted.svelte';
 
   let models = $state([]);
   let loaded = $state([]);
   let loading = $state(true);
   let err = $state(null);
+  // Whether `ollama serve` is up — drives the Get Started card vs. the grid.
+  let ollamaReachable = $state(true);
 
   // Delete confirmation per-model name
   let confirmingDelete = $state('');
@@ -30,7 +33,7 @@
   let pollHandle;
 
   async function refresh() {
-    const [m, l] = await Promise.allSettled([getModels(), getLoaded()]);
+    const [m, l, o] = await Promise.allSettled([getModels(), getLoaded(), getOllamaInfo()]);
     if (m.status === 'fulfilled') {
       models = m.value;
       err = null;
@@ -38,6 +41,7 @@
       err = m.reason?.message || 'failed to load models';
     }
     if (l.status === 'fulfilled') loaded = l.value;
+    if (o.status === 'fulfilled') ollamaReachable = o.value.reachable;
     loading = false;
   }
 
@@ -102,12 +106,15 @@
   <!-- LEFT: live oscilloscope, big, always visible -->
   <div class="lg:w-2/5 flex flex-col min-h-[280px] lg:min-h-0">
     <div class="mb-2 shrink-0">
-      <div class="text-xs font-mono text-muted uppercase tracking-wider">
+      <div
+        class="text-xs font-mono text-muted uppercase tracking-wider cursor-help"
+        title="A model is 'in VRAM' once it's loaded into GPU memory — Ollama keeps it warm for a few minutes after use, then frees it."
+      >
         live activity · {loaded.length}
         {loaded.length === 1 ? 'model' : 'models'} in vram
       </div>
       <div class="text-[10px] font-mono text-muted opacity-70 mt-0.5">
-        all Ollama clients · spikes per request
+        each spike is a model writing text — live, from here or any Ollama app
       </div>
     </div>
     <div class="flex-1 min-h-0">
@@ -142,18 +149,8 @@
         <div class="text-muted text-sm font-mono">loading…</div>
       {:else if err}
         <div class="text-error text-sm font-mono">error: {err}</div>
-      {:else if models.length === 0}
-        <Card>
-          <div class="text-center text-sm py-6 space-y-2">
-            <div class="text-muted">No models installed yet.</div>
-            <button
-              onclick={() => go('pull')}
-              class="text-accent hover:underline font-mono text-sm"
-            >
-              Add a model →
-            </button>
-          </div>
-        </Card>
+      {:else if !ollamaReachable || models.length === 0}
+        <GetStarted {ollamaReachable} hasModels={models.length > 0} />
       {:else}
         <div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
           {#each models as m (m.name)}
@@ -235,22 +232,42 @@
 
               <div class="grid grid-cols-3 gap-2 text-xs font-mono">
                 <div>
-                  <div class="text-muted text-[10px] uppercase">params</div>
+                  <div
+                    class="text-muted text-[10px] uppercase cursor-help"
+                    title="Parameters, in billions — the model's size. More can mean smarter, but slower and heavier."
+                  >
+                    params
+                  </div>
                   <div class="text-body">{fmtParams(m.details?.parameter_size) || '—'}</div>
                 </div>
                 <div>
-                  <div class="text-muted text-[10px] uppercase">size</div>
+                  <div
+                    class="text-muted text-[10px] uppercase cursor-help"
+                    title="Disk space the model file takes up."
+                  >
+                    size
+                  </div>
                   <div class="text-body">{fmtBytes(m.size)}</div>
                 </div>
                 <div>
-                  <div class="text-muted text-[10px] uppercase">quant</div>
+                  <div
+                    class="text-muted text-[10px] uppercase cursor-help"
+                    title="Quantization — how compressed the weights are. Q4 = 4-bit: smaller and faster, with a slight quality tradeoff."
+                  >
+                    quant
+                  </div>
                   <div class="text-body">{m.details?.quantization_level || '—'}</div>
                 </div>
               </div>
 
               <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-border">
                 <div class="text-xs text-muted font-mono">
-                  {m.details?.family || '—'} · modified {ollamaTimeAgo(m.modified_at)}
+                  <span
+                    class="cursor-help"
+                    title="The model family this is built on (llama, gemma, qwen…). Same family, similar behaviour."
+                    >{m.details?.family || '—'}</span
+                  >
+                  · modified {ollamaTimeAgo(m.modified_at)}
                 </div>
                 {#if hints.tryPrompt}
                   <button

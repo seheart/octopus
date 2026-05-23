@@ -1,11 +1,15 @@
 <script>
   import { onMount } from 'svelte';
-  import { getModels, pullModel } from '../api.js';
+  import { getModels, getHostInfo, getGpu, pullModel, fmtBytes } from '../api.js';
   import { go } from '../stores/route.svelte.js';
-  import { setModel, selectedModel } from '../stores/model.svelte.js';
+  import { setModel, selectedModel, consumePendingPull } from '../stores/model.svelte.js';
   import { Button, Card, Section } from '../components/ui/index.js';
+  import { modelFit, parseApproxSize } from '../modelFit.js';
 
   let installed = $state([]);
+  // Host RAM + GPU VRAM — used to badge each suggestion with how well it runs.
+  let host = $state(null);
+  let gpu = $state(null);
 
   let pullName = $state('');
   let pulling = $state(false);
@@ -111,7 +115,37 @@
     }
   }
 
-  onMount(refresh);
+  async function loadHardware() {
+    // Hardware is static for the session — fetch once, not on every refresh.
+    const [h, g] = await Promise.allSettled([getHostInfo(), getGpu()]);
+    if (h.status === 'fulfilled') host = h.value;
+    if (g.status === 'fulfilled') gpu = g.value;
+  }
+
+  const ramBytes = $derived(host?.memory?.total_bytes || 0);
+  const vramBytes = $derived(
+    gpu?.available ? gpu.gpus.reduce((sum, g) => sum + (g.memory_total_mb || 0) * 1e6, 0) : 0
+  );
+  const hwKnown = $derived(ramBytes > 0 || vramBytes > 0);
+  const gpuLabel = $derived(
+    gpu?.available && gpu.gpus.length ? gpu.gpus.map((g) => g.name).join(', ') : ''
+  );
+
+  function fitClass(tier) {
+    if (tier === 'great') return 'bg-success/15 text-success border-success/40';
+    if (tier === 'tight') return 'bg-warning/15 text-warning border-warning/40';
+    if (tier === 'wont-fit') return 'bg-error/15 text-error border-error/40';
+    return '';
+  }
+
+  onMount(async () => {
+    await refresh();
+    loadHardware();
+    // A fresh user who clicked "Pull <model>" on the Get Started card lands
+    // here with the download already kicked off — no extra click needed.
+    const seed = consumePendingPull();
+    if (seed) startPull(seed);
+  });
 
   function isInstalled(name) {
     return installed.some((m) => m.name === name || m.name.startsWith(name + ':'));
@@ -176,15 +210,12 @@
       <h1 class="text-2xl font-bold text-heading">Add a model</h1>
     </div>
     <p class="text-sm text-muted max-w-2xl">
-      Pulls from Ollama's registry. Type a model name (e.g. <code
-        class="font-mono text-body bg-surface-2 px-1 rounded">qwen3:8b</code
-      >) or pick from the suggestions below. Names follow
-      <code class="font-mono text-body bg-surface-2 px-1 rounded">family[:tag]</code> — leave the tag
-      off for the default.
+      Each suggestion below says what it's good at and whether it'll run well on this machine.
+      Adding a model downloads it once — after that it works offline, with no account needed.
     </p>
 
     <Card padding="lg">
-      <Section title="pull by name">
+      <Section title="add by name">
         <div class="flex gap-2 items-center mb-3">
           <input
             type="text"
@@ -198,7 +229,7 @@
             <Button variant="secondary" onclick={cancelPull}>cancel</Button>
           {:else}
             <Button variant="primary" onclick={() => startPull()} disabled={!pullName.trim()}>
-              pull
+              Add
             </Button>
           {/if}
         </div>
@@ -239,6 +270,14 @@
       </Section>
     </Card>
 
+    {#if hwKnown}
+      <p class="font-mono text-xs text-muted">
+        Fit badges below reflect this machine — {fmtBytes(ramBytes)} RAM{gpuLabel
+          ? ` · ${gpuLabel}, ${fmtBytes(vramBytes)} VRAM`
+          : ' · no GPU detected'}
+      </p>
+    {/if}
+
     {#each groups as group (group.heading)}
       <div>
         <div class="text-xs font-mono text-muted uppercase tracking-wider mb-1">
@@ -248,12 +287,25 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           {#each group.items as item (item.name)}
             {@const installed = isInstalled(item.name)}
+            {@const fit = modelFit(parseApproxSize(item.size), { ramBytes, vramBytes })}
             <div
               class="bg-surface border border-border rounded-lg p-4 flex flex-col gap-2 hover:border-accent transition-colors"
             >
               <div class="flex items-baseline justify-between gap-2">
                 <div class="font-mono text-sm text-heading font-medium truncate">{item.name}</div>
-                <span class="text-[10px] font-mono text-muted shrink-0">{item.size}</span>
+                <div class="flex items-baseline gap-1.5 shrink-0">
+                  {#if fit.tier !== 'unknown'}
+                    <span
+                      class="text-[10px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border {fitClass(
+                        fit.tier
+                      )}"
+                      title={fit.detail}
+                    >
+                      {fit.label}
+                    </span>
+                  {/if}
+                  <span class="text-[10px] font-mono text-muted">{item.size}</span>
+                </div>
               </div>
               <p class="text-sm text-body leading-snug">{item.desc}</p>
               <div class="mt-auto pt-1">
@@ -267,7 +319,7 @@
                     disabled={pulling}
                     class="text-xs font-mono text-accent hover:underline disabled:opacity-40 disabled:no-underline"
                   >
-                    pull this →
+                    Add →
                   </button>
                 {/if}
               </div>

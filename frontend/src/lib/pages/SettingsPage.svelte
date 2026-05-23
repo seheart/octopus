@@ -2,7 +2,6 @@
   import { theme, setTheme } from '../stores/theme.svelte.js';
   import { selectedModel, setModel } from '../stores/model.svelte.js';
   import { Card, Section } from '../components/ui/index.js';
-  import { go } from '../stores/route.svelte.js';
   import { onMount } from 'svelte';
   import { getModels } from '../api.js';
 
@@ -19,12 +18,6 @@
   const themes = [
     { id: 'light', label: 'Light', desc: 'Cream paper, ink black' },
     { id: 'dark', label: 'Dark', desc: 'Black canvas, phosphor green' }
-  ];
-
-  const morePages = [
-    { id: 'design', label: 'Design system', desc: 'Tokens, primitives, component examples' },
-    { id: 'roadmap', label: 'Roadmap', desc: 'What is shipped and what is next' },
-    { id: 'about', label: 'About', desc: 'What this is and why it exists' }
   ];
 </script>
 
@@ -84,23 +77,6 @@
           Octopus stores theme + default-model in your browser's localStorage. There is no server
           state, no telemetry, and no account. Clearing site data resets these to defaults.
         </p>
-      </Section>
-    </Card>
-
-    <!-- More pages -->
-    <Card padding="lg">
-      <Section title="more">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {#each morePages as p (p.id)}
-            <button
-              onclick={() => go(p.id)}
-              class="text-left p-3 rounded border border-border bg-surface hover:border-accent hover:bg-surface-2 transition-colors"
-            >
-              <div class="font-mono text-sm text-heading">{p.label} →</div>
-              <div class="text-xs text-muted mt-0.5">{p.desc}</div>
-            </button>
-          {/each}
-        </div>
       </Section>
     </Card>
   </div>

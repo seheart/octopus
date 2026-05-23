@@ -149,7 +149,10 @@
                 <div class="flex items-baseline justify-between gap-3 mb-1">
                   <div class="flex items-baseline gap-2 min-w-0">
                     <div class="font-mono text-sm text-heading truncate">{m.name}</div>
-                    <div class="text-[10px] font-mono text-muted shrink-0">
+                    <div
+                      class="text-[10px] font-mono text-muted shrink-0 cursor-help"
+                      title="Parameter count (the model's size) · quantization (how tightly its weights are compressed)."
+                    >
                       {fmtParams(m.details?.parameter_size) || '—'} · {m.details
                         ?.quantization_level || '—'}
                     </div>
