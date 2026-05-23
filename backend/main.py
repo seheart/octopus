@@ -423,19 +423,6 @@ async def _check_ollama() -> dict[str, Any]:
         return {"status": "fail", "detail": f"unreachable: {e}"}
 
 
-async def _check_wifi() -> dict[str, Any]:
-    """Reach a public host to confirm DNS + internet work — needed for `ollama pull`."""
-    url = "https://ollama.com/"
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=3.0)) as c:
-            r = await c.head(url, follow_redirects=True)
-        if r.status_code < 400:
-            return {"status": "pass", "detail": f"reached {url} (HTTP {r.status_code})"}
-        return {"status": "warn", "detail": f"{url} returned HTTP {r.status_code}"}
-    except httpx.RequestError as e:
-        return {"status": "fail", "detail": f"no internet: {e}"}
-
-
 async def _check_disk() -> dict[str, Any]:
     try:
         usage = shutil.disk_usage("/")
@@ -493,7 +480,6 @@ CheckFn = Callable[[], Awaitable[dict[str, Any]]]
 # (id, label, category, fn). Category groups the UI; order is run order.
 _DIAGNOSTIC_CHECKS: list[tuple[str, str, str, CheckFn]] = [
     ("ollama", "Ollama reachable", "runtime", _check_ollama),
-    ("wifi", "Wifi · internet reachable", "runtime", _check_wifi),
     ("disk", "Disk free on root", "runtime", _check_disk),
     (
         "backend_lint",

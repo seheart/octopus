@@ -527,51 +527,6 @@ def test_check_ollama_pass_and_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "unreachable" in res["detail"]
 
 
-def test_check_wifi_pass_warn_fail(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_check_wifi handles 2xx, 4xx/5xx, and connection error."""
-    import asyncio
-
-    import httpx as _httpx
-
-    class FakeClient:
-        def __init__(self, resp: Any = None, exc: Exception | None = None) -> None:
-            self._resp = resp
-            self._exc = exc
-
-        async def __aenter__(self) -> "FakeClient":
-            return self
-
-        async def __aexit__(self, *_: Any) -> None:
-            return None
-
-        async def head(self, _url: str, **_kw: Any) -> Any:
-            if self._exc is not None:
-                raise self._exc
-            return self._resp
-
-    ok = MagicMock()
-    ok.status_code = 200
-    monkeypatch.setattr("main.httpx.AsyncClient", lambda **_: FakeClient(resp=ok))
-    res = asyncio.run(main._check_wifi())
-    assert res["status"] == "pass"
-    assert "200" in res["detail"]
-
-    bad = MagicMock()
-    bad.status_code = 503
-    monkeypatch.setattr("main.httpx.AsyncClient", lambda **_: FakeClient(resp=bad))
-    res = asyncio.run(main._check_wifi())
-    assert res["status"] == "warn"
-    assert "503" in res["detail"]
-
-    monkeypatch.setattr(
-        "main.httpx.AsyncClient",
-        lambda **_: FakeClient(exc=_httpx.ConnectError("dns fail")),
-    )
-    res = asyncio.run(main._check_wifi())
-    assert res["status"] == "fail"
-    assert "no internet" in res["detail"]
-
-
 def test_check_audit_scans_frontend(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     """_check_audit walks frontend/src and reports forbidden patterns."""
     import asyncio
