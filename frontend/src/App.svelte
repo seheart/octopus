@@ -14,19 +14,35 @@
   import LabsPage from './lib/pages/LabsPage.svelte';
   import AboutPage from './lib/pages/AboutPage.svelte';
   import SettingsPage from './lib/pages/SettingsPage.svelte';
-  import { route } from './lib/stores/route.svelte.js';
+  import { route, go } from './lib/stores/route.svelte.js';
   import { initTheme } from './lib/stores/theme.svelte.js';
   import { startActivityPoller } from './lib/stores/activity.svelte.js';
+  import CommandPalette from './lib/components/CommandPalette.svelte';
 
   onMount(() => {
     initTheme();
     // Watches Ollama globally so the Oscilloscope shows activity from
     // every client (Octopus, raven, ollama CLI, …) — not just our chats.
     startActivityPoller();
+    window.addEventListener('keydown', onGlobalKey);
+    return () => window.removeEventListener('keydown', onGlobalKey);
   });
+
+  // Cmd+/ shows shortcuts (jumps to Settings). Cmd+N jumps to chat and
+  // dispatches an event the ChatPage listens for to clear the thread.
+  function onGlobalKey(e) {
+    const meta = e.metaKey || e.ctrlKey;
+    if (!meta) return;
+    if (e.key.toLowerCase() === 'n') {
+      e.preventDefault();
+      go('chat');
+      window.dispatchEvent(new CustomEvent('octopus:new-chat'));
+    }
+  }
 </script>
 
 <div class="h-screen flex flex-col bg-canvas text-body font-sans">
+  <CommandPalette />
   <Banner />
   <Header />
   <div class="flex-1 overflow-hidden">

@@ -19,6 +19,10 @@
   let lastSample = $state({ at: 0, bytes: 0 });
   let bytesPerSec = $state(0);
 
+  // Hand-curated catalog. Ollama itself has no stable public catalog API;
+  // updating this list is a periodic human task. The "last reviewed" date
+  // below is exposed in the UI so readers know how fresh the picks are.
+  const CATALOG_REVIEWED = '2026-05-24';
   const groups = [
     {
       heading: 'General · everyday chat',
@@ -297,6 +301,10 @@
         </p>
       </Section>
     </Card>
+
+    <div class="text-[11px] font-mono text-muted opacity-70 -mb-2">
+      Curated picks · last reviewed {CATALOG_REVIEWED}
+    </div>
 
     {#each groups as group (group.heading)}
       <div>

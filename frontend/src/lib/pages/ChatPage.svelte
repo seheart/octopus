@@ -4,6 +4,7 @@
   import { selectedModel, setModel, consumePendingPrompt } from '../stores/model.svelte.js';
   import { recordToken } from '../stores/activity.svelte.js';
   import { renderMarkdown } from '../markdown.js';
+  import { codeCopy } from '../markdownActions.js';
   import { modelHints } from '../modelHints.js';
   import { go } from '../stores/route.svelte.js';
   import { Button } from '../components/ui/index.js';
@@ -61,13 +62,23 @@
     const seed = consumePendingPrompt();
     if (seed) input = seed;
     inputEl?.focus();
+    window.addEventListener('octopus:new-chat', onNewChat);
   });
 
   onDestroy(() => {
     clearInterval(pollHandle);
     clearTimeout(warmupHandle);
     currentChat?.abort();
+    window.removeEventListener('octopus:new-chat', onNewChat);
   });
+
+  function onNewChat() {
+    if (streaming) stop();
+    messages = [];
+    liveStat = null;
+    input = '';
+    inputEl?.focus();
+  }
 
   async function loadModels() {
     try {
@@ -397,7 +408,7 @@
                 </div>
               </details>
             {/if}
-            <div class="markdown-body text-body">
+            <div class="markdown-body text-body" use:codeCopy>
               {#if msg.content}
                 <!-- eslint-disable-next-line svelte/no-at-html-tags — DOMPurify-sanitized in markdown.js -->
                 {@html renderMarkdown(msg.content)}
@@ -474,7 +485,7 @@
           </div>
         {:else}
           <div class="text-[11px] text-muted mt-1.5 font-mono opacity-70">
-            Enter to send · Shift+Enter for a new line
+            Enter to send · Shift+Enter for a new line · ⌘K to jump anywhere
           </div>
         {/if}
       </div>
