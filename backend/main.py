@@ -15,7 +15,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+def _resolve_ollama_url() -> str:
+    if url := os.environ.get("OLLAMA_URL"):
+        return url
+    if host := os.environ.get("OLLAMA_HOST"):
+        return host if host.startswith(("http://", "https://")) else f"http://{host}"
+    return "http://127.0.0.1:11434"
+
+
+OLLAMA_URL = _resolve_ollama_url()
 
 # Ollama model identifiers: alnum + `_ . : / -`. We additionally reject `..`
 # and leading `/` so a malformed name can't trick a downstream component into
