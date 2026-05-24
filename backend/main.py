@@ -499,7 +499,12 @@ async def _check_ollama_model_updates() -> dict[str, Any]:
     if not checked:
         return {"status": "warn", "detail": f"no models checkable (skipped {skipped})"}
     if stale:
-        return {"status": "warn", "detail": f"{len(stale)} stale: {', '.join(stale)}"}
+        pulls = "\n".join(f"  ollama pull {n}" for n in stale)
+        return {
+            "status": "warn",
+            "detail": f"{len(stale)} stale: {', '.join(stale)}",
+            "remediation": f"Re-pull each stale model:\n{pulls}",
+        }
     return {"status": "pass", "detail": f"all {checked} models up to date"}
 
 
@@ -566,13 +571,62 @@ async def _check_pip_outdated() -> dict[str, Any]:
         return {"status": "warn", "detail": "could not parse pip output"}
     if not data:
         return {"status": "pass", "detail": "all pip packages up to date"}
+    names = sorted(p.get("name", "?") for p in data)
+    # Special-case pydantic_core: pinned `==` by pydantic, so a new pydantic_core
+    # is uninstallable until pydantic itself releases. Don't tell users to run a
+    # command that won't work.
+    if names == ["pydantic_core"]:
+        remediation = (
+            "pydantic_core is hard-pinned by pydantic — it auto-resolves when "
+            "pydantic releases a version with a newer pin. No action needed."
+        )
+    else:
+        remediation = (
+            "Upgrade transitive deps in the backend venv:\n"
+            "  cd backend && .venv/bin/pip install --upgrade --upgrade-strategy eager "
+            "-r requirements-dev.txt"
+        )
     return {
         "status": "warn",
-        "detail": _format_outdated_detail(sorted(p.get("name", "?") for p in data)),
+        "detail": _format_outdated_detail(names),
+        "remediation": remediation,
     }
 
 
 CheckFn = Callable[[], Awaitable[dict[str, Any]]]
+
+# Static remediation text shown when a check is not "pass". Per-check functions
+# can override by returning a "remediation" key in their result dict (used when
+# the fix depends on the failure detail — e.g., listing specific stale models).
+_DEFAULT_REMEDIATIONS: dict[str, str] = {
+    "ollama": "Start Ollama:\n  systemctl start ollama\nor:\n  ollama serve",
+    "disk": (
+        "Free space. Largest typical culprit is the Ollama model store:\n"
+        "  du -sh ~/.ollama/models/* 2>/dev/null | sort -h\n"
+        "  ollama rm <model>"
+    ),
+    "backend_lint": ("Auto-fix:\n  cd backend && .venv/bin/ruff check --fix ."),
+    "backend_format": ("Auto-fix:\n  cd backend && .venv/bin/ruff format ."),
+    "backend_types": "Address the type errors above and re-run.",
+    "backend_tests": "Inspect the failing tests above and fix the regression.",
+    "frontend_types": "Address the svelte-check errors above and re-run.",
+    "frontend_lint": "Auto-fix what can be:\n  cd frontend && npm run lint:fix",
+    "frontend_tests": "Inspect the failing vitest output above and fix the regression.",
+    "audit": (
+        "Remove `console.log`, `debugger`, or credential-shaped literals from the listed files."
+    ),
+    "ollama_version_update": (
+        "Upgrade Ollama:\n"
+        "  curl -fsSL https://ollama.com/install.sh | sh\n"
+        "  sudo systemctl restart ollama"
+    ),
+    "npm_outdated": (
+        "Bump everything to latest:\n"
+        "  cd frontend && npm install --save-dev <pkg>@latest [<pkg>@latest ...]\n"
+        "Or review/merge open Dependabot PRs."
+    ),
+}
+
 # (id, label, category, fn). Category groups the UI; order is run order.
 _DIAGNOSTIC_CHECKS: list[tuple[str, str, str, CheckFn]] = [
     ("ollama", "Ollama reachable", "runtime", _check_ollama),
@@ -656,6 +710,12 @@ async def run_diagnostic() -> StreamingResponse:
             ms = int((time.perf_counter() - t0) * 1000)
             status = result.get("status", "fail")
             summary[status] = summary.get(status, 0) + 1
+            # Per-check remediation overrides the static default; only attach
+            # when the check didn't pass (no point telling the user how to fix
+            # something that's working).
+            remediation = result.get("remediation") or (
+                _DEFAULT_REMEDIATIONS.get(cid) if status != "pass" else None
+            )
             yield _sse(
                 {
                     "type": "check",
@@ -665,6 +725,7 @@ async def run_diagnostic() -> StreamingResponse:
                     "status": status,
                     "duration_ms": ms,
                     "detail": result.get("detail", ""),
+                    "remediation": remediation,
                 }
             )
         yield _sse(

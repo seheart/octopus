@@ -3,7 +3,7 @@
   import { getDiagnosticChecks, runDiagnostic } from '../api.js';
   import { Button, Card, Section } from '../components/ui/index.js';
 
-  /** @type {Array<{id:string, name:string, category:string, status?:string, duration_ms?:number, detail?:string, expanded?:boolean}>} */
+  /** @type {Array<{id:string, name:string, category:string, status?:string, duration_ms?:number, detail?:string, remediation?:string|null, expanded?:boolean}>} */
   let checks = $state([]);
   let running = $state(false);
   let runFinishedAt = $state(null);
@@ -77,6 +77,7 @@
       status: undefined,
       duration_ms: undefined,
       detail: undefined,
+      remediation: null,
       expanded: false
     }));
     running = true;
@@ -91,7 +92,11 @@
                   ...c,
                   status: evt.status,
                   duration_ms: evt.duration_ms,
-                  detail: evt.detail
+                  detail: evt.detail,
+                  remediation: evt.remediation ?? null,
+                  // Auto-expand non-passing rows so the fix is visible without
+                  // an extra click — the whole point is making it user-friendly.
+                  expanded: evt.status !== 'pass'
                 }
               : c
           );
@@ -141,6 +146,13 @@
         if (c.detail) {
           lines.push('```');
           lines.push(c.detail);
+          lines.push('```');
+        }
+        if (c.remediation) {
+          lines.push('');
+          lines.push('**How to fix:**');
+          lines.push('```');
+          lines.push(c.remediation);
           lines.push('```');
         }
       }
@@ -228,8 +240,9 @@
                       : ''}"
               >
                 <button
-                  onclick={() => c.detail && toggle(c.id)}
-                  class="w-full flex items-center justify-between gap-3 py-2 text-left {c.detail
+                  onclick={() => (c.detail || c.remediation) && toggle(c.id)}
+                  class="w-full flex items-center justify-between gap-3 py-2 text-left {c.detail ||
+                  c.remediation
                     ? 'cursor-pointer hover:bg-surface-2'
                     : 'cursor-default'} rounded px-2"
                   aria-expanded={!!c.expanded}
@@ -254,7 +267,7 @@
                     {#if c.duration_ms !== undefined}
                       <span>{c.duration_ms}ms</span>
                     {/if}
-                    {#if c.detail}
+                    {#if c.detail || c.remediation}
                       <span aria-hidden="true">{c.expanded ? '▾' : '▸'}</span>
                     {/if}
                   </div>
@@ -262,6 +275,19 @@
                 {#if c.expanded && c.detail}
                   <pre
                     class="text-[11px] font-mono text-body bg-surface-2 rounded px-3 py-2 mx-2 mb-2 whitespace-pre-wrap break-words overflow-x-auto">{c.detail}</pre>
+                {/if}
+                {#if c.expanded && c.remediation}
+                  <div
+                    class="text-[11px] font-mono text-body border-l-2 border-l-accent bg-surface-2 rounded-r px-3 py-2 mx-2 mb-2"
+                  >
+                    <div
+                      class="text-[10px] uppercase tracking-wider text-accent font-semibold mb-1"
+                    >
+                      how to fix
+                    </div>
+                    <pre
+                      class="whitespace-pre-wrap break-words overflow-x-auto">{c.remediation}</pre>
+                  </div>
                 {/if}
               </div>
             {/each}
