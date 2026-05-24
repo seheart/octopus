@@ -380,7 +380,10 @@ def test_pull_emits_error_on_request_failure(
     r = client.post("/api/pull", json={"model": "fake:1b"})
     assert r.status_code == 200
     assert '"status": "error"' in r.text
-    assert "ollama gone" in r.text
+    # Error message is scrubbed of upstream details to avoid leaking the
+    # OLLAMA_URL or stack-trace fragments to the rendered DOM.
+    assert "upstream unreachable" in r.text
+    assert "ollama gone" not in r.text
 
 
 def test_check_disk_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -460,6 +463,10 @@ def test_check_audit_scans_frontend(monkeypatch: pytest.MonkeyPatch, tmp_path: A
     )
 
     monkeypatch.setattr(main, "FRONTEND_DIR", tmp_path)
+    # Point BACKEND_DIR + REPO_ROOT at tmp_path too — the audit now scans
+    # backend Python files and repo-root shell scripts; without redirecting,
+    # the real backend would leak into a "tmp_path" sandboxed test.
+    monkeypatch.setattr(main, "BACKEND_DIR", tmp_path)
     monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
     res = asyncio.run(main._check_audit())
     # Two patterns trip in leaky.js — both reported, no exception, status warn.
@@ -473,6 +480,7 @@ def test_check_audit_clean_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) 
     src.mkdir()
     (src / "clean.svelte").write_text("export const x = 1;\n", encoding="utf-8")
     monkeypatch.setattr(main, "FRONTEND_DIR", tmp_path)
+    monkeypatch.setattr(main, "BACKEND_DIR", tmp_path)
     monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
     res = asyncio.run(main._check_audit())
     assert res["status"] == "pass"
@@ -642,6 +650,139 @@ def test_diagnostic_checks_endpoint_lists_all_checks(client: TestClient) -> None
         assert {"id", "name", "category"} <= c.keys()
 
 
+# Checks whose remediation depends on the failure details (returned dynamically
+# by the check function) rather than a static per-id template.
+_DYNAMIC_REMEDIATION_CHECKS = {
+    "audit",  # the offending file:line *is* the remediation
+    "ollama_model_updates",  # `ollama pull <name>` per stale model
+    "pip_outdated",  # special-cased for the pydantic_core upstream pin
+}
+
+
+def test_origin_guard_blocks_cross_origin_post(client: TestClient) -> None:
+    """A malicious page POSTing from another origin must be 403'd before the
+    handler runs — otherwise it could trigger diagnostic subprocesses or
+    model pulls as a side-effect even without reading the response."""
+    r = client.post("/api/diagnostic", headers={"Origin": "http://evil.example.com"})
+    assert r.status_code == 403
+
+
+def test_origin_guard_allows_same_origin_post(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """Same-origin POST (vite dev server) must pass through. Use the lighter
+    /api/pull endpoint with a fake client to avoid actually running checks."""
+
+    class NoopStream:
+        async def __aenter__(self) -> "NoopStream":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def aiter_lines(self) -> Any:
+            for line in ('{"status":"success"}',):
+                yield line
+
+    fake = MagicMock()
+    fake.stream = MagicMock(return_value=NoopStream())
+    monkeypatch.setattr(main, "client", fake)
+    r = client.post(
+        "/api/pull",
+        json={"model": "fake:1b"},
+        headers={"Origin": "http://127.0.0.1:8801"},
+    )
+    assert r.status_code == 200
+
+
+def test_origin_guard_allows_missing_origin(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """curl and local scripts don't send Origin — must still work."""
+
+    class NoopStream:
+        async def __aenter__(self) -> "NoopStream":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def aiter_lines(self) -> Any:
+            for line in ('{"status":"success"}',):
+                yield line
+
+    fake = MagicMock()
+    fake.stream = MagicMock(return_value=NoopStream())
+    monkeypatch.setattr(main, "client", fake)
+    r = client.post("/api/pull", json={"model": "fake:1b"})
+    assert r.status_code == 200
+
+
+def test_origin_guard_does_not_block_reads(client: TestClient) -> None:
+    """GETs from any origin are fine — they have no side effects and CORS
+    blocks the response body from being read cross-origin anyway."""
+    r = client.get("/api/host", headers={"Origin": "http://evil.example.com"})
+    assert r.status_code == 200
+
+
+def test_resolve_ollama_url_rejects_non_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stray OLLAMA_URL pointing at a remote must fail-fast at startup,
+    not silently proxy chats to it."""
+    monkeypatch.setenv("OLLAMA_URL", "http://evil.example.com:11434")
+    monkeypatch.delenv("OCTOPUS_ALLOW_REMOTE_OLLAMA", raising=False)
+    with pytest.raises(RuntimeError, match="not loopback"):
+        main._resolve_ollama_url()
+
+
+def test_resolve_ollama_url_allows_remote_when_opted_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Power users can override the loopback guard explicitly."""
+    monkeypatch.setenv("OLLAMA_URL", "http://elsewhere.local:11434")
+    monkeypatch.setenv("OCTOPUS_ALLOW_REMOTE_OLLAMA", "1")
+    assert main._resolve_ollama_url() == "http://elsewhere.local:11434"
+
+
+def test_resolve_ollama_url_loopback_variants_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """127.0.0.1, localhost, and ::1 are all loopback — accept all three."""
+    monkeypatch.delenv("OCTOPUS_ALLOW_REMOTE_OLLAMA", raising=False)
+    for url in (
+        "http://127.0.0.1:11434",
+        "http://localhost:11435",
+        "http://[::1]:11434",
+    ):
+        monkeypatch.setenv("OLLAMA_URL", url)
+        assert main._resolve_ollama_url() == url
+
+
+def test_gpu_endpoint_skips_malformed_line(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """A driver hiccup that drops columns mustn't 500 the telemetry endpoint."""
+    csv = "NVIDIA RTX 5070, 8000, 12000, 42, 58\nbroken-row, only, three\n"
+    monkeypatch.setattr(subprocess, "check_output", lambda *_, **__: csv)
+    r = client.get("/api/gpu")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert len(body["gpus"]) == 1  # malformed row dropped silently
+
+
+def test_every_diagnostic_check_has_remediation_coverage() -> None:
+    """Every check id either has a static remediation or is documented dynamic.
+
+    Catches the class of bug where a new check ships without a "how to fix"
+    callout and silently degrades the UX of the diagnostic page.
+    """
+    static = set(main._DEFAULT_REMEDIATIONS.keys())
+    dynamic = _DYNAMIC_REMEDIATION_CHECKS
+    declared = {cid for cid, *_ in main._DIAGNOSTIC_CHECKS}
+
+    missing = declared - static - dynamic
+    assert not missing, f"checks without remediation: {sorted(missing)}"
+
+    stale = (static | dynamic) - declared
+    assert not stale, f"remediation declared for non-existent check: {sorted(stale)}"
+
+
 def test_run_diagnostic_streams_summary(
     monkeypatch: pytest.MonkeyPatch, client: TestClient
 ) -> None:
@@ -748,4 +889,6 @@ def test_chat_emits_error_on_request_failure(
     )
     assert r.status_code == 200
     assert '"type": "error"' in r.text
-    assert "ollama down" in r.text
+    # Scrubbed to "upstream unreachable" — see _check_audit / SSE error sites.
+    assert "upstream unreachable" in r.text
+    assert "ollama down" not in r.text

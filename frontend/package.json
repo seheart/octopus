@@ -17,7 +17,7 @@
     "lint:css": "stylelint \"src/**/*.{css,svelte}\"",
     "lint:css:fix": "stylelint \"src/**/*.{css,svelte}\" --fix",
     "lint:dead": "knip",
-    "audit:deps": "npm audit --audit-level=high",
+    "audit:deps": "npm audit --audit-level=moderate",
     "format": "prettier --write \"src/**/*.{js,svelte,css,html}\" \"e2e/**/*.js\" \"*.{js,json,html}\"",
     "format:check": "prettier --check \"src/**/*.{js,svelte,css,html}\" \"e2e/**/*.js\" \"*.{js,json,html}\"",
     "check": "svelte-check --tsconfig ./jsconfig.json",

@@ -48,8 +48,8 @@ jobs:
       - name: Tests
         run: npm test
 
-      - name: npm audit (high+ severity)
-        run: npm audit --audit-level=high
+      - name: npm audit (moderate+ severity)
+        run: npm audit --audit-level=moderate
         continue-on-error: false
 
       - name: Build

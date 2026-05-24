@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { getModels, getLoaded, getGpu, fmtBytes, fmtParams } from '../api.js';
+  import { getModels, getLoaded, getGpu, chatStream, fmtBytes, fmtParams } from '../api.js';
   import { selectedModel, setModel, consumePendingPrompt } from '../stores/model.svelte.js';
   import { recordToken } from '../stores/activity.svelte.js';
   import { renderMarkdown } from '../markdown.js';
@@ -15,8 +15,6 @@
   let gpu = $state(null);
   let warmupActive = $state(false);
   let copyJustCopied = $state(-1);
-  /** @type {AbortController | null} */
-  let currentAbort = null;
   /** @type {ReturnType<typeof setInterval> | undefined} */
   let pollHandle;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -24,6 +22,16 @@
   let scrollEl;
   /** @type {HTMLTextAreaElement | undefined} */
   let inputEl;
+  /** @type {ReturnType<typeof chatStream> | null} */
+  let currentChat = null;
+
+  // Replace the trailing message in-place. With $state holding a plain array,
+  // mutating the last element doesn't trigger reactivity — we have to swap
+  // the array reference. Centralizing this avoids the 5x-repeated tail-slice
+  // dance and the matching "remember to do it after every mutation" footgun.
+  function replaceLast(msg) {
+    messages = [...messages.slice(0, -1), msg];
+  }
 
   const examplePrompts = [
     'Explain async/await in JavaScript with a simple example.',
@@ -45,7 +53,7 @@
   onDestroy(() => {
     clearInterval(pollHandle);
     clearTimeout(warmupHandle);
-    currentAbort?.abort();
+    currentChat?.abort();
   });
 
   async function loadModels() {
@@ -88,80 +96,57 @@
       .filter((m) => m.role !== 'assistant' || m.content)
       .map((m) => ({ role: m.role, content: m.content }));
 
-    currentAbort = new AbortController();
-
     try {
-      const resp = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model: selectedModel.value, messages: conv }),
-        signal: currentAbort.signal
-      });
-
-      if (!resp.ok) throw new Error(`chat failed: ${resp.status}`);
-      if (!resp.body) throw new Error('chat failed: empty response body');
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n\n');
-        buf = lines.pop();
-        for (const block of lines) {
-          const line = block.split('\n').find((l) => l.startsWith('data: '));
-          if (!line) continue;
-          const evt = JSON.parse(line.slice(6));
-          const last = messages[messages.length - 1];
-          if (evt.type === 'token') {
-            last.content += evt.content;
-            messages = [...messages.slice(0, -1), last];
-            warmupActive = false;
-            // Real per-model signal for the Oscilloscope on the Models page.
-            recordToken(selectedModel.value);
-            scrollToBottom();
-          } else if (evt.type === 'thinking') {
-            last.thinking = (last.thinking || '') + evt.content;
-            messages = [...messages.slice(0, -1), last];
-            warmupActive = false;
-            scrollToBottom();
-          } else if (evt.type === 'ttft') {
-            liveStat = { ...(liveStat || {}), ttft_ms: evt.ms };
-          } else if (evt.type === 'done') {
-            last.stats = {
-              ttft_ms: liveStat?.ttft_ms,
-              tokens_per_sec: evt.tokens_per_sec,
-              eval_count: evt.eval_count,
-              total_ms: evt.total_ms
-            };
-            messages = [...messages.slice(0, -1), last];
-            liveStat = last.stats;
-          } else if (evt.type === 'error') {
-            // Backend surfaces structured errors when Ollama drops mid-stream.
-            last.content = (last.content || '') + `\n\n_Error: ${evt.message}_`;
-            messages = [...messages.slice(0, -1), last];
-            warmupActive = false;
-          }
+      currentChat = chatStream({ model: selectedModel.value, messages: conv }, (evt) => {
+        const last = messages[messages.length - 1];
+        if (evt.type === 'token') {
+          last.content += evt.content;
+          replaceLast(last);
+          warmupActive = false;
+          // Real per-model signal for the Oscilloscope on the Models page.
+          recordToken(selectedModel.value);
+          scrollToBottom();
+        } else if (evt.type === 'thinking') {
+          last.thinking = (last.thinking || '') + evt.content;
+          replaceLast(last);
+          warmupActive = false;
+          scrollToBottom();
+        } else if (evt.type === 'ttft') {
+          liveStat = { ...(liveStat || {}), ttft_ms: evt.ms };
+        } else if (evt.type === 'done') {
+          last.stats = {
+            ttft_ms: liveStat?.ttft_ms,
+            tokens_per_sec: evt.tokens_per_sec,
+            eval_count: evt.eval_count,
+            total_ms: evt.total_ms
+          };
+          replaceLast(last);
+          liveStat = last.stats;
+        } else if (evt.type === 'error') {
+          // Backend surfaces structured errors when Ollama drops mid-stream.
+          last.content = (last.content || '') + `\n\n_Error: ${evt.message}_`;
+          replaceLast(last);
+          warmupActive = false;
         }
-      }
+      });
+      await currentChat.done;
     } catch (err) {
       if (err.name !== 'AbortError') {
         const last = messages[messages.length - 1];
         last.content = (last.content || '') + `\n\n_Error: ${err.message}_`;
-        messages = [...messages.slice(0, -1), last];
+        replaceLast(last);
       }
     } finally {
       streaming = false;
       warmupActive = false;
-      currentAbort = null;
+      currentChat = null;
       clearTimeout(warmupHandle);
       refresh();
     }
   }
 
   function stop() {
-    currentAbort?.abort();
+    currentChat?.abort();
   }
 
   function onKey(e) {

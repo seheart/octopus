@@ -1,5 +1,7 @@
 import asyncio
+import ipaddress
 import json
+import logging
 import os
 import re
 import shutil
@@ -9,19 +11,41 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, field_validator
+from starlette.middleware.base import BaseHTTPMiddleware
+
+log = logging.getLogger("octopus")
 
 
 def _resolve_ollama_url() -> str:
-    if url := os.environ.get("OLLAMA_URL"):
-        return url
-    if host := os.environ.get("OLLAMA_HOST"):
-        return host if host.startswith(("http://", "https://")) else f"http://{host}"
-    return "http://127.0.0.1:11434"
+    raw = os.environ.get("OLLAMA_URL")
+    if not raw:
+        if host := os.environ.get("OLLAMA_HOST"):
+            raw = host if host.startswith(("http://", "https://")) else f"http://{host}"
+        else:
+            raw = "http://127.0.0.1:11434"
+    # Refuse non-loopback hosts unless explicitly allowed — otherwise a stray
+    # OLLAMA_URL in shell init silently exfiltrates every chat to a remote.
+    if os.environ.get("OCTOPUS_ALLOW_REMOTE_OLLAMA") != "1":
+        host = (urlparse(raw).hostname or "").lower()
+        if host not in ("localhost", ""):
+            try:
+                if not ipaddress.ip_address(host).is_loopback:
+                    raise RuntimeError(
+                        f"OLLAMA_URL host {host!r} is not loopback. "
+                        "Set OCTOPUS_ALLOW_REMOTE_OLLAMA=1 to override."
+                    )
+            except ValueError as e:
+                raise RuntimeError(
+                    f"OLLAMA_URL host {host!r} is not loopback. "
+                    "Set OCTOPUS_ALLOW_REMOTE_OLLAMA=1 to override."
+                ) from e
+    return raw
 
 
 OLLAMA_URL = _resolve_ollama_url()
@@ -32,13 +56,21 @@ OLLAMA_URL = _resolve_ollama_url()
 _MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9_./:-]{1,200}$")
 
 
+def _is_valid_model_name(name: str) -> bool:
+    return bool(_MODEL_NAME_RE.match(name)) and ".." not in name and not name.startswith("/")
+
+
 def _validate_model_name(name: str) -> str:
-    if not _MODEL_NAME_RE.match(name) or ".." in name or name.startswith("/"):
+    if not _is_valid_model_name(name):
         raise HTTPException(status_code=400, detail="invalid model name")
     return name
 
 
-client = httpx.AsyncClient(base_url=OLLAMA_URL, timeout=httpx.Timeout(600.0, connect=5.0))
+client = httpx.AsyncClient(
+    base_url=OLLAMA_URL,
+    timeout=httpx.Timeout(600.0, connect=5.0),
+    follow_redirects=False,
+)
 
 
 @asynccontextmanager
@@ -50,7 +82,46 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await client.aclose()
 
 
+# Only the Vite dev server and the bundled-prod entrypoint should drive the
+# API. We accept missing Origin (curl/local scripts/SSR), 127.0.0.1, and
+# localhost. Everything else is a malicious-tab attempt and gets rejected
+# before the handler runs. Reads (GET/HEAD/OPTIONS) are still open — they
+# carry no side effects and the response body is opaque to other origins
+# anyway thanks to default CORS.
+_ALLOWED_ORIGINS = frozenset(
+    {
+        "http://127.0.0.1:8801",
+        "http://localhost:8801",
+        # The bundled prod page is served by uvicorn itself when both run
+        # on the same port — not the case today, but harmless if it ever is.
+        "http://127.0.0.1:8800",
+        "http://localhost:8800",
+    }
+)
+_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+class OriginGuard(BaseHTTPMiddleware):
+    """Reject mutating cross-origin requests.
+
+    Backend binds 127.0.0.1, so the threat is a malicious page in another tab
+    firing a CORS-simple POST (e.g. `fetch('/api/diagnostic',{method:'POST'})`)
+    — the browser sends it without preflight, and even though the response is
+    opaque to the attacker, the side effect (spawning subprocesses, pulling
+    models) is enough damage. Browsers always send Origin on cross-origin
+    POSTs; we allow missing Origin so curl/local scripts still work.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Any:
+        if request.method in _MUTATING_METHODS:
+            origin = request.headers.get("origin")
+            if origin and origin not in _ALLOWED_ORIGINS:
+                return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        return await call_next(request)
+
+
 app = FastAPI(title="Octopus", lifespan=lifespan)
+app.add_middleware(OriginGuard)
 
 
 class ChatMessage(BaseModel):
@@ -72,7 +143,7 @@ class ChatRequest(BaseModel):
     @field_validator("model")
     @classmethod
     def _check_model(cls, v: str) -> str:
-        if not _MODEL_NAME_RE.match(v) or ".." in v or v.startswith("/"):
+        if not _is_valid_model_name(v):
             raise ValueError("invalid model name")
         return v
 
@@ -83,7 +154,7 @@ class PullRequest(BaseModel):
     @field_validator("model")
     @classmethod
     def _check_model(cls, v: str) -> str:
-        if not _MODEL_NAME_RE.match(v) or ".." in v or v.startswith("/"):
+        if not _is_valid_model_name(v):
             raise ValueError("invalid model name")
         return v
 
@@ -188,16 +259,23 @@ def gpu_stats() -> dict[str, Any]:
         return {"available": False}
     gpus = []
     for line in out.strip().splitlines():
-        name, used, total, util, temp = (p.strip() for p in line.split(","))
-        gpus.append(
-            {
-                "name": name,
-                "memory_used_mb": int(used),
-                "memory_total_mb": int(total),
-                "utilization_pct": int(util),
-                "temp_c": int(temp),
-            }
-        )
+        parts = [p.strip() for p in line.split(",")]
+        # Skip malformed lines rather than 500'ing the endpoint — a driver
+        # quirk that changes column count shouldn't take down telemetry.
+        if len(parts) != 5:
+            continue
+        try:
+            gpus.append(
+                {
+                    "name": parts[0],
+                    "memory_used_mb": int(parts[1]),
+                    "memory_total_mb": int(parts[2]),
+                    "utilization_pct": int(parts[3]),
+                    "temp_c": int(parts[4]),
+                }
+            )
+        except ValueError:
+            continue
     return {"available": True, "gpus": gpus}
 
 
@@ -254,7 +332,10 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         except httpx.RequestError as e:
             # Ollama unreachable or connection dropped mid-stream — surface
             # a structured error event instead of a truncated SSE response.
-            yield _sse({"type": "error", "message": str(e)})
+            # Log full exception server-side; show generic message client-side
+            # so OLLAMA_URL and other internals don't leak to the rendered DOM.
+            log.warning("chat stream failed: %s", e)
+            yield _sse({"type": "error", "message": "upstream unreachable"})
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 
@@ -318,7 +399,8 @@ async def pull_model(req: PullRequest) -> StreamingResponse:
                         continue
                     yield _sse(chunk)
         except httpx.RequestError as e:
-            yield _sse({"status": "error", "error": str(e)})
+            log.warning("pull stream failed: %s", e)
+            yield _sse({"status": "error", "error": "upstream unreachable"})
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 
@@ -380,12 +462,17 @@ async def _check_disk() -> dict[str, Any]:
         return {"status": "fail", "detail": str(e)}
 
 
-# Patterns we never want to ship — secrets, debug leftovers.
+# Patterns we never want to ship — secrets, debug leftovers. Frontend +
+# backend are both scanned; without the backend pass the "all clear" badge
+# would mislead about scope. Common token shapes (AWS access key, GitHub
+# personal-access token) catch the most-likely accident.
 _AUDIT_PATTERNS = [
     (
         re.compile(r"(?i)\b(api[_-]?key|secret|password|bearer\s+[A-Za-z0-9_\-]{16,})\s*[:=]"),
         "possible credential literal",
     ),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AWS access key id"),
+    (re.compile(r"\bghp_[A-Za-z0-9]{36}\b"), "GitHub personal access token"),
     (re.compile(r"console\.log\("), "console.log left in source"),
     (re.compile(r"\bdebugger\b"), "debugger statement"),
 ]
@@ -393,11 +480,17 @@ _AUDIT_PATTERNS = [
 
 async def _check_audit() -> dict[str, Any]:
     findings: list[str] = []
-    targets = list((FRONTEND_DIR / "src").rglob("*.svelte")) + list(
-        (FRONTEND_DIR / "src").rglob("*.js")
+    targets = (
+        list((FRONTEND_DIR / "src").rglob("*.svelte"))
+        + list((FRONTEND_DIR / "src").rglob("*.js"))
+        + [p for p in BACKEND_DIR.rglob("*.py") if ".venv" not in p.parts]
+        + [p for p in REPO_ROOT.rglob("*.sh") if "node_modules" not in p.parts]
     )
     for path in targets:
-        if "node_modules" in path.parts or ".test." in path.name or ".spec." in path.name:
+        # Test files intentionally contain `console.log`, stub credentials,
+        # and stub tokens for regression coverage. Skipping them avoids a
+        # forever-yellow audit, not a real blind spot.
+        if ".test." in path.name or ".spec." in path.name or path.name == "test_main.py":
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
@@ -440,10 +533,11 @@ async def _check_ollama_version_update() -> dict[str, Any]:
     except (httpx.RequestError, httpx.HTTPStatusError) as e:
         return {"status": "warn", "detail": f"could not read local version: {e}"}
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as gh:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), follow_redirects=False) as gh:
             gr = await gh.get("https://api.github.com/repos/ollama/ollama/releases/latest")
     except httpx.RequestError as e:
-        return {"status": "warn", "detail": f"GitHub unreachable: {e}"}
+        log.warning("GitHub unreachable for Ollama version check: %s", e)
+        return {"status": "warn", "detail": "GitHub unreachable"}
     if gr.status_code != 200:
         return {"status": "warn", "detail": f"GitHub HTTP {gr.status_code}"}
     latest_raw = gr.json().get("tag_name", "")
@@ -470,7 +564,7 @@ async def _check_ollama_model_updates() -> dict[str, Any]:
     stale: list[str] = []
     checked = 0
     skipped = 0
-    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as reg:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), follow_redirects=False) as reg:
         for m in models:
             name = m.get("name") or m.get("model") or ""
             local_digest = (m.get("digest") or "").lower().removeprefix("sha256:")
@@ -481,9 +575,16 @@ async def _check_ollama_model_updates() -> dict[str, Any]:
             if not name or not local_digest or "/" in base:
                 skipped += 1
                 continue
+            # Quote path segments — Ollama validates model names server-side, but
+            # the registry HEAD is defense-in-depth against a malformed name
+            # carrying url-special characters.
+            url = (
+                f"https://registry.ollama.ai/v2/library/{quote(base, safe='')}"
+                f"/manifests/{quote(tag, safe='')}"
+            )
             try:
                 resp = await reg.head(
-                    f"https://registry.ollama.ai/v2/library/{base}/manifests/{tag}",
+                    url,
                     headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
                 )
             except httpx.RequestError:
@@ -706,7 +807,8 @@ async def run_diagnostic() -> StreamingResponse:
                 result = await fn()
             except Exception as e:
                 # Any uncaught error becomes a visible "fail" row instead of killing the stream.
-                result = {"status": "fail", "detail": f"check raised: {e}"}
+                log.exception("diagnostic check %r raised", cid)
+                result = {"status": "fail", "detail": f"check raised: {type(e).__name__}"}
             ms = int((time.perf_counter() - t0) * 1000)
             status = result.get("status", "fail")
             summary[status] = summary.get(status, 0) + 1
