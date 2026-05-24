@@ -231,7 +231,7 @@
           <a
             href="https://ollama.com/library"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             class="text-accent hover:underline">ollama.com/library</a
           >
           — copy any name from there into the box above.

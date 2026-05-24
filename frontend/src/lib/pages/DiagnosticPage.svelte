@@ -143,10 +143,16 @@
         const dur = c.duration_ms !== undefined ? ` (${c.duration_ms}ms)` : '';
         lines.push('');
         lines.push(`### [${status}] ${c.name}${dur}`);
-        if (c.detail) {
+        // Audit findings are file:line pointers to potential secret-shaped
+        // literals. Putting those into the clipboard (which often syncs to
+        // phones and persists in paste history) hurts more than it helps —
+        // the user already sees them in the expanded UI.
+        if (c.detail && c.id !== 'audit') {
           lines.push('```');
           lines.push(c.detail);
           lines.push('```');
+        } else if (c.id === 'audit' && c.status !== 'pass') {
+          lines.push('_(audit findings hidden from clipboard report — see UI)_');
         }
         if (c.remediation) {
           lines.push('');

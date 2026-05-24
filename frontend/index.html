@@ -4,13 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Octopus — Model Lab</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
+    <!--
+      Strict CSP: scripts and styles only from same origin. The single inline
+      <script> below is allowed via 'unsafe-inline' because it's static (no
+      DOM interpolation, no user input) and bundling it into main.js would
+      reintroduce the theme-flash on cold load. All XHR/fetch must be same
+      origin (vite proxies /api/* to the backend in dev). Frame embedding is
+      blocked outright. No remote fonts / images / media.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     />
+    <title>Octopus — Model Lab</title>
     <!-- Apply saved theme synchronously to prevent flash -->
     <script>
       try {

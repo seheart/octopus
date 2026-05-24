@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege GITHUB_TOKEN. A compromised dependency that runs at
+# `npm ci` / `pip install` time gets read-only access; can't push, can't
+# create releases, can't comment.
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -112,8 +118,13 @@ jobs:
       - name: Mypy
         run: mypy .
 
-      - name: pip-audit (vulnerable dependencies)
+      - name: pip-audit (runtime deps)
         run: pip-audit -r requirements.txt
+
+      - name: pip-audit (dev deps)
+        # Dev deps run at install-time on every CI box and dev laptop, so a
+        # vulnerable dev dep is just as dangerous as a runtime one.
+        run: pip-audit -r requirements-dev.txt
 
       - name: Pytest with coverage gate
         run: pytest --cov=. --cov-report=term-missing

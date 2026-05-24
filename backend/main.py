@@ -16,7 +16,7 @@ from urllib.parse import quote, urlparse
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 
 log = logging.getLogger("octopus")
@@ -66,10 +66,14 @@ def _validate_model_name(name: str) -> str:
     return name
 
 
+# Cap the Ollama connection pool so a runaway client (or a malicious local
+# script firing N concurrent chat streams) can't exhaust httpx's default
+# pool and starve legitimate UI calls.
 client = httpx.AsyncClient(
     base_url=OLLAMA_URL,
     timeout=httpx.Timeout(600.0, connect=5.0),
     follow_redirects=False,
+    limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
 )
 
 
@@ -101,8 +105,14 @@ _ALLOWED_ORIGINS = frozenset(
 _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
+# Body-size cap (1 MB). Chat prompts shouldn't exceed this; pulls/models/diag
+# don't need bodies that large either. Without this, a local script can POST
+# a multi-GB body and OOM the backend before Pydantic gets a chance to reject.
+_MAX_BODY_BYTES = 1_000_000
+
+
 class OriginGuard(BaseHTTPMiddleware):
-    """Reject mutating cross-origin requests.
+    """Reject mutating cross-origin requests and over-size bodies.
 
     Backend binds 127.0.0.1, so the threat is a malicious page in another tab
     firing a CORS-simple POST (e.g. `fetch('/api/diagnostic',{method:'POST'})`)
@@ -110,6 +120,10 @@ class OriginGuard(BaseHTTPMiddleware):
     opaque to the attacker, the side effect (spawning subprocesses, pulling
     models) is enough damage. Browsers always send Origin on cross-origin
     POSTs; we allow missing Origin so curl/local scripts still work.
+
+    Also enforces a Content-Length cap on mutating requests — Pydantic's
+    field-level max_length runs after the body is buffered, so a multi-GB
+    POST would OOM before validation. Reject up front.
     """
 
     async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Any:
@@ -117,16 +131,55 @@ class OriginGuard(BaseHTTPMiddleware):
             origin = request.headers.get("origin")
             if origin and origin not in _ALLOWED_ORIGINS:
                 return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+            cl = request.headers.get("content-length")
+            if cl is not None:
+                try:
+                    if int(cl) > _MAX_BODY_BYTES:
+                        return JSONResponse({"detail": "request body too large"}, status_code=413)
+                except ValueError:
+                    return JSONResponse({"detail": "invalid content-length"}, status_code=400)
         return await call_next(request)
 
 
-app = FastAPI(title="Octopus", lifespan=lifespan)
+class SecurityHeaders(BaseHTTPMiddleware):
+    """Defense-in-depth response headers.
+
+    - X-Frame-Options blocks the API and SPA from being iframed (clickjacking).
+    - CSP frame-ancestors does the modern equivalent.
+    - X-Content-Type-Options stops MIME sniffing.
+    - Referrer-Policy keeps URLs (which may contain model names) off any link.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Any:
+        resp = await call_next(request)
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("Referrer-Policy", "no-referrer")
+        return resp
+
+
+# Disable the FastAPI docs UI by default. They aren't needed at runtime —
+# the SPA is the only client — and an exposed /openapi.json lays out every
+# endpoint + schema for any local process to enumerate. Set OCTOPUS_DOCS=1
+# during local debugging if you need them back.
+_DOCS_ENABLED = os.environ.get("OCTOPUS_DOCS") == "1"
+app = FastAPI(
+    title="Octopus",
+    lifespan=lifespan,
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
+)
+app.add_middleware(SecurityHeaders)
 app.add_middleware(OriginGuard)
 
 
 class ChatMessage(BaseModel):
+    # Caps are generous but defined — without them a single message could be
+    # MBs of text, and the request as a whole is body-size-capped anyway.
     role: str
-    content: str
+    content: str = Field(..., max_length=200_000)
 
     @field_validator("role")
     @classmethod
@@ -137,8 +190,8 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    model: str
-    messages: list[ChatMessage]
+    model: str = Field(..., max_length=200)
+    messages: list[ChatMessage] = Field(..., max_length=200)
 
     @field_validator("model")
     @classmethod
@@ -149,7 +202,7 @@ class ChatRequest(BaseModel):
 
 
 class PullRequest(BaseModel):
-    model: str
+    model: str = Field(..., max_length=200)
 
     @field_validator("model")
     @classmethod
@@ -412,6 +465,31 @@ BACKEND_DIR = REPO_ROOT / "backend"
 FRONTEND_DIR = REPO_ROOT / "frontend"
 
 
+_HOME = os.path.expanduser("~")
+
+
+def _scrub_paths(text: str) -> str:
+    """Strip absolute paths from diagnostic output. Avoids leaking the user's
+    username (via $HOME) and any repo path that diverges from $CWD when
+    rendered into the UI or copied to the clipboard."""
+    return text.replace(str(REPO_ROOT), ".").replace(_HOME, "~")
+
+
+# Resolve diagnostic binaries to absolute paths at import time. Without this
+# a malicious shadow `npm` on PATH could be invoked by the diagnostic; with
+# it, the path is fixed at process start and re-resolution can't poison it.
+_RESOLVED_BINS: dict[str, str] = {}
+
+
+def _resolve_bin(name: str) -> str:
+    if name not in _RESOLVED_BINS:
+        path = shutil.which(name)
+        # Fall back to the bare name; FileNotFoundError downstream tells the
+        # user the binary's missing, which is honest.
+        _RESOLVED_BINS[name] = path or name
+    return _RESOLVED_BINS[name]
+
+
 async def _run_shell(cmd: list[str], cwd: Path, timeout: float = 120.0) -> dict[str, Any]:
     """Run a shell command, return {status, detail} where status is pass/fail."""
     try:
@@ -427,7 +505,7 @@ async def _run_shell(cmd: list[str], cwd: Path, timeout: float = 120.0) -> dict[
             proc.kill()
             await proc.wait()
             return {"status": "fail", "detail": f"timed out after {timeout:.0f}s"}
-        text = stdout.decode("utf-8", errors="replace").strip()
+        text = _scrub_paths(stdout.decode("utf-8", errors="replace").strip())
         # Trim noise — keep last ~40 lines so the UI excerpt stays useful.
         lines = text.splitlines()
         excerpt = "\n".join(lines[-40:]) if len(lines) > 40 else text
@@ -478,13 +556,30 @@ _AUDIT_PATTERNS = [
 ]
 
 
+# Prune massive irrelevant trees at descent time so we never enter them.
+# `Path.rglob` + post-filter still walks every node_modules subdir on disk
+# (thousands of files per repo); the audit then iterates a giant list. Use
+# os.walk so we can mutate dirs[] and skip whole subtrees before they're
+# enumerated.
+_AUDIT_PRUNE_DIRS = frozenset({"node_modules", ".venv", ".git", "dist", "__pycache__"})
+
+
+def _walk_files(root: Path, suffixes: tuple[str, ...]) -> list[Path]:
+    out: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _AUDIT_PRUNE_DIRS]
+        for name in filenames:
+            if name.endswith(suffixes):
+                out.append(Path(dirpath) / name)
+    return out
+
+
 async def _check_audit() -> dict[str, Any]:
     findings: list[str] = []
     targets = (
-        list((FRONTEND_DIR / "src").rglob("*.svelte"))
-        + list((FRONTEND_DIR / "src").rglob("*.js"))
-        + [p for p in BACKEND_DIR.rglob("*.py") if ".venv" not in p.parts]
-        + [p for p in REPO_ROOT.rglob("*.sh") if "node_modules" not in p.parts]
+        _walk_files(FRONTEND_DIR / "src", (".svelte", ".js"))
+        + _walk_files(BACKEND_DIR, (".py",))
+        + _walk_files(REPO_ROOT, (".sh",))
     )
     for path in targets:
         # Test files intentionally contain `console.log`, stub credentials,
@@ -619,7 +714,7 @@ async def _check_npm_outdated() -> dict[str, Any]:
     """`npm outdated --json` in frontend/. Empty → pass; populated → warn."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "npm",
+            _resolve_bin("npm"),
             "outdated",
             "--json",
             cwd=str(FRONTEND_DIR),
@@ -760,19 +855,19 @@ _DIAGNOSTIC_CHECKS: list[tuple[str, str, str, CheckFn]] = [
         "frontend_types",
         "frontend · svelte-check",
         "code",
-        lambda: _run_shell(["npm", "run", "check"], FRONTEND_DIR),
+        lambda: _run_shell([_resolve_bin("npm"), "run", "check"], FRONTEND_DIR),
     ),
     (
         "frontend_lint",
         "frontend · eslint",
         "code",
-        lambda: _run_shell(["npm", "run", "lint"], FRONTEND_DIR),
+        lambda: _run_shell([_resolve_bin("npm"), "run", "lint"], FRONTEND_DIR),
     ),
     (
         "frontend_tests",
         "frontend · vitest",
         "code",
-        lambda: _run_shell(["npm", "run", "test"], FRONTEND_DIR),
+        lambda: _run_shell([_resolve_bin("npm"), "run", "test"], FRONTEND_DIR),
     ),
     ("audit", "audit · secrets / debug leftovers", "audit", _check_audit),
     ("ollama_version_update", "Ollama version up to date", "updates", _check_ollama_version_update),
@@ -792,50 +887,59 @@ def diagnostic_checks() -> dict[str, Any]:
     }
 
 
+# Single-flight: only one diagnostic run at a time. A page reload or a
+# malicious script could otherwise spawn N parallel runs of `npm`,
+# `pytest`, `mypy`, etc., saturating disk and CPU.
+_diagnostic_lock = asyncio.Lock()
+
+
 @app.post("/api/diagnostic")
 async def run_diagnostic() -> StreamingResponse:
     """Run every diagnostic check, streaming results as each finishes (SSE)."""
+    if _diagnostic_lock.locked():
+        raise HTTPException(status_code=409, detail="diagnostic already running")
 
     async def stream() -> AsyncIterator[bytes]:
-        run_start = time.perf_counter()
-        summary = {"pass": 0, "warn": 0, "fail": 0}
-        yield _sse({"type": "start", "total": len(_DIAGNOSTIC_CHECKS)})
-        for cid, name, category, fn in _DIAGNOSTIC_CHECKS:
-            yield _sse({"type": "running", "id": cid})
-            t0 = time.perf_counter()
-            try:
-                result = await fn()
-            except Exception as e:
-                # Any uncaught error becomes a visible "fail" row instead of killing the stream.
-                log.exception("diagnostic check %r raised", cid)
-                result = {"status": "fail", "detail": f"check raised: {type(e).__name__}"}
-            ms = int((time.perf_counter() - t0) * 1000)
-            status = result.get("status", "fail")
-            summary[status] = summary.get(status, 0) + 1
-            # Per-check remediation overrides the static default; only attach
-            # when the check didn't pass (no point telling the user how to fix
-            # something that's working).
-            remediation = result.get("remediation") or (
-                _DEFAULT_REMEDIATIONS.get(cid) if status != "pass" else None
-            )
+        async with _diagnostic_lock:
+            run_start = time.perf_counter()
+            summary = {"pass": 0, "warn": 0, "fail": 0}
+            yield _sse({"type": "start", "total": len(_DIAGNOSTIC_CHECKS)})
+            for cid, name, category, fn in _DIAGNOSTIC_CHECKS:
+                yield _sse({"type": "running", "id": cid})
+                t0 = time.perf_counter()
+                try:
+                    result = await fn()
+                except Exception as e:
+                    # Any uncaught error becomes a visible "fail" row instead of killing the stream.
+                    log.exception("diagnostic check %r raised", cid)
+                    result = {"status": "fail", "detail": f"check raised: {type(e).__name__}"}
+                ms = int((time.perf_counter() - t0) * 1000)
+                status = result.get("status", "fail")
+                summary[status] = summary.get(status, 0) + 1
+                # Per-check remediation overrides the static default; only attach
+                # when the check didn't pass (no point telling the user how to fix
+                # something that's working).
+                remediation = result.get("remediation") or (
+                    _DEFAULT_REMEDIATIONS.get(cid) if status != "pass" else None
+                )
+                yield _sse(
+                    {
+                        "type": "check",
+                        "id": cid,
+                        "name": name,
+                        "category": category,
+                        "status": status,
+                        "duration_ms": ms,
+                        "detail": result.get("detail", ""),
+                        "remediation": remediation,
+                    }
+                )
             yield _sse(
                 {
-                    "type": "check",
-                    "id": cid,
-                    "name": name,
-                    "category": category,
-                    "status": status,
-                    "duration_ms": ms,
-                    "detail": result.get("detail", ""),
-                    "remediation": remediation,
+                    "type": "done",
+                    "summary": summary,
+                    "duration_ms": int((time.perf_counter() - run_start) * 1000),
                 }
             )
-        yield _sse(
-            {
-                "type": "done",
-                "summary": summary,
-                "duration_ms": int((time.perf_counter() - run_start) * 1000),
-            }
-        )
 
     return StreamingResponse(stream(), media_type="text/event-stream")

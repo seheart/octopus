@@ -1,6 +1,7 @@
 import asyncio
 import json
 import subprocess
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -657,6 +658,88 @@ _DYNAMIC_REMEDIATION_CHECKS = {
     "ollama_model_updates",  # `ollama pull <name>` per stale model
     "pip_outdated",  # special-cased for the pydantic_core upstream pin
 }
+
+
+def test_docs_disabled_by_default(client: TestClient) -> None:
+    """FastAPI docs UI must be off — it enumerates every endpoint and
+    schema, which is gift-wrapping for any local process."""
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_security_headers_present_on_responses(client: TestClient) -> None:
+    """Defense-in-depth: clickjacking-blocking headers on every response."""
+    r = client.get("/api/host")
+    assert r.status_code == 200
+    assert r.headers.get("x-frame-options") == "DENY"
+    assert "frame-ancestors 'none'" in r.headers.get("content-security-policy", "")
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    assert r.headers.get("referrer-policy") == "no-referrer"
+
+
+def test_oversize_body_rejected_before_handler(client: TestClient) -> None:
+    """A multi-MB body must 413 from the middleware, not OOM via Pydantic."""
+    r = client.post(
+        "/api/chat",
+        headers={
+            "content-type": "application/json",
+            "content-length": "10000000",  # 10 MB declared
+        },
+        content=b"{}",  # actual body irrelevant — middleware reads CL header
+    )
+    assert r.status_code == 413
+
+
+def test_chat_request_caps_content_length(client: TestClient) -> None:
+    """Per-message content cap prevents a single message from ballooning."""
+    huge = "x" * 300_000
+    r = client.post(
+        "/api/chat",
+        json={"model": "qwen3:14b", "messages": [{"role": "user", "content": huge}]},
+    )
+    assert r.status_code == 422  # Pydantic rejects via Field(max_length=200_000)
+
+
+def test_diagnostic_single_flight_returns_409(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """Concurrent /api/diagnostic POSTs must be rejected, not stacked."""
+
+    # Manually hold the lock to simulate a running diagnostic; second POST
+    # must 409 without entering the run.
+    main._diagnostic_lock = asyncio.Lock()  # fresh lock for test isolation
+    held = asyncio.Event()
+
+    async def hold_lock() -> None:
+        async with main._diagnostic_lock:
+            held.set()
+            await asyncio.sleep(0.5)
+
+    async def run() -> int:
+        task = asyncio.create_task(hold_lock())
+        await held.wait()
+        try:
+            r = client.post("/api/diagnostic")
+            return int(r.status_code)
+        finally:
+            await task
+
+    assert asyncio.run(run()) == 409
+
+
+def test_scrub_paths_strips_repo_root_and_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Diagnostic output must not leak the absolute repo path or $HOME
+    (which carries the username) to the user-facing detail."""
+    monkeypatch.setattr(main, "REPO_ROOT", Path("/projects/octopus"))
+    monkeypatch.setattr(main, "_HOME", "/home/alice")
+    out = main._scrub_paths(
+        "Error at /projects/octopus/backend/main.py\nconfig in /home/alice/.cache"
+    )
+    assert "/projects/octopus" not in out
+    assert "/home/alice" not in out
+    assert "./backend/main.py" in out
+    assert "~/.cache" in out
 
 
 def test_origin_guard_blocks_cross_origin_post(client: TestClient) -> None:
