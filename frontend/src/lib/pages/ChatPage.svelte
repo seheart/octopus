@@ -4,6 +4,8 @@
   import { selectedModel, setModel, consumePendingPrompt } from '../stores/model.svelte.js';
   import { recordToken } from '../stores/activity.svelte.js';
   import { renderMarkdown } from '../markdown.js';
+  import { modelHints } from '../modelHints.js';
+  import { go } from '../stores/route.svelte.js';
   import { Button } from '../components/ui/index.js';
 
   let models = $state([]);
@@ -15,28 +17,40 @@
   let gpu = $state(null);
   let warmupActive = $state(false);
   let copyJustCopied = $state(-1);
+  let modelsLoadError = $state(null);
+  // True only after the first /api/models call returns, so we don't flash
+  // the "no models yet" panel before we know.
+  let modelsLoaded = $state(false);
   /** @type {ReturnType<typeof setInterval> | undefined} */
   let pollHandle;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let warmupHandle;
-  let scrollEl;
+  /** @type {HTMLElement | undefined} */
+  let scrollEl = $state();
   /** @type {HTMLTextAreaElement | undefined} */
-  let inputEl;
+  let inputEl = $state();
   /** @type {ReturnType<typeof chatStream> | null} */
   let currentChat = null;
+  // Stay pinned to bottom UNLESS the user has scrolled up to re-read; flips
+  // back on once they return to within 50px of the bottom.
+  let pinnedToBottom = true;
 
-  // Replace the trailing message in-place. With $state holding a plain array,
-  // mutating the last element doesn't trigger reactivity — we have to swap
-  // the array reference. Centralizing this avoids the 5x-repeated tail-slice
-  // dance and the matching "remember to do it after every mutation" footgun.
   function replaceLast(msg) {
     messages = [...messages.slice(0, -1), msg];
   }
 
-  const examplePrompts = [
+  // For the empty-chat state, derive 3 starter prompts from the currently
+  // selected model's modelHints. Falls back to the general default if no
+  // model is selected.
+  const currentHints = $derived.by(() => {
+    const m = models.find((mm) => mm.name === selectedModel.value);
+    return m ? modelHints(m) : null;
+  });
+
+  // Generic warmup prompts shown only when there's no selected model.
+  const fallbackPrompts = [
     'Explain async/await in JavaScript with a simple example.',
     'Write a Python function that returns the n-th Fibonacci number, memoized.',
-    'What are three good system prompts for code review?',
     'Summarize the difference between SQLite WAL and rollback journal modes.'
   ];
 
@@ -44,7 +58,6 @@
     await loadModels();
     await refresh();
     pollHandle = setInterval(refresh, 2000);
-    // If we got here from a "Try this prompt" click, seed the input.
     const seed = consumePendingPrompt();
     if (seed) input = seed;
     inputEl?.focus();
@@ -60,13 +73,15 @@
     try {
       const all = await getModels();
       models = all.filter((m) => !m.name.includes('embed'));
-      // If a stored selection exists and is still installed, keep it.
-      // Otherwise pick the first available.
+      // Persist selection across reloads; pick first available if nothing valid.
       if (!selectedModel.value || !models.some((m) => m.name === selectedModel.value)) {
         if (models.length) setModel(models[0].name);
       }
-    } catch (_e) {
-      /* offline */
+      modelsLoadError = null;
+    } catch (e) {
+      modelsLoadError = e?.message || 'Could not reach the backend.';
+    } finally {
+      modelsLoaded = true;
     }
   }
 
@@ -85,9 +100,9 @@
     streaming = true;
     liveStat = null;
     warmupActive = false;
+    pinnedToBottom = true;
     scrollToBottom();
 
-    // Show "warming up" hint if no token after 2.5s.
     warmupHandle = setTimeout(() => {
       if (streaming && !messages[messages.length - 1].content) warmupActive = true;
     }, 2500);
@@ -103,7 +118,6 @@
           last.content += evt.content;
           replaceLast(last);
           warmupActive = false;
-          // Real per-model signal for the Oscilloscope on the Models page.
           recordToken(selectedModel.value);
           scrollToBottom();
         } else if (evt.type === 'thinking') {
@@ -123,7 +137,6 @@
           replaceLast(last);
           liveStat = last.stats;
         } else if (evt.type === 'error') {
-          // Backend surfaces structured errors when Ollama drops mid-stream.
           last.content = (last.content || '') + `\n\n_Error: ${evt.message}_`;
           replaceLast(last);
           warmupActive = false;
@@ -157,12 +170,20 @@
   }
 
   function scrollToBottom() {
+    if (!pinnedToBottom) return;
     queueMicrotask(() => {
       if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
     });
   }
 
+  function onScroll() {
+    if (!scrollEl) return;
+    // Treat "within 50px of bottom" as pinned, to tolerate slight rounding.
+    pinnedToBottom = scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 50;
+  }
+
   function clearChat() {
+    if (messages.length > 4 && !confirm('Clear this conversation?')) return;
     messages = [];
     liveStat = null;
   }
@@ -183,48 +204,158 @@
     input = text;
     inputEl?.focus();
   }
+
+  // Three starter-friendly model recommendations for the "no models" empty
+  // state. Sizes are approximate (educational, not load-bearing).
+  const starterModels = [
+    {
+      name: 'llama3.2:3b',
+      size: '~2 GB',
+      desc: 'Small and fast. A friendly first pick.'
+    },
+    {
+      name: 'llama3.1:8b',
+      size: '~4.7 GB',
+      desc: 'Better answers, still quick on most GPUs.'
+    },
+    {
+      name: 'qwen3:8b',
+      size: '~5 GB',
+      desc: 'Thinks before it answers. Stronger on hard questions.'
+    }
+  ];
+
+  const placeholder = $derived(
+    selectedModel.value ? `Message ${selectedModel.value}` : 'Pick a model above to start'
+  );
+
+  const canSend = $derived(!!selectedModel.value && !!input.trim() && !streaming);
 </script>
 
 <div class="h-full flex overflow-hidden">
-  <!-- Chat panel -->
   <main class="flex-1 flex flex-col overflow-hidden">
-    <div
-      class="px-4 py-2 border-b border-border bg-surface flex items-center justify-between gap-3"
-    >
-      <select
-        value={selectedModel.value}
-        onchange={(e) => setModel(e.currentTarget.value)}
-        class="bg-surface-2 text-body border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:border-accent max-w-md"
+    <!-- Model picker + clear. Picker is hidden when there are no models at
+         all (the empty state below takes over). -->
+    {#if models.length > 0}
+      <div
+        class="px-4 py-2 border-b border-border bg-surface flex items-center justify-between gap-3"
       >
-        {#each models as m (m.name)}
-          <option value={m.name}>{m.name} · {fmtParams(m.details?.parameter_size)}</option>
-        {/each}
-      </select>
-      <Button
-        variant="secondary"
-        size="sm"
-        onclick={clearChat}
-        disabled={messages.length === 0 || streaming}
-      >
-        clear
-      </Button>
-    </div>
+        <label class="flex items-center gap-2 min-w-0 text-xs text-muted">
+          <span class="shrink-0">Model</span>
+          <select
+            value={selectedModel.value}
+            onchange={(e) => setModel(e.currentTarget.value)}
+            class="bg-surface-2 text-body border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:border-accent max-w-md"
+            aria-label="Select chat model"
+          >
+            {#each models as m (m.name)}
+              <option value={m.name}>{m.name} · {fmtParams(m.details?.parameter_size)}</option>
+            {/each}
+          </select>
+        </label>
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={clearChat}
+          disabled={messages.length === 0 || streaming}
+        >
+          Clear
+        </Button>
+      </div>
+    {/if}
 
-    <div bind:this={scrollEl} class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-      {#if messages.length === 0}
+    <div
+      bind:this={scrollEl}
+      onscroll={onScroll}
+      class="flex-1 overflow-y-auto px-6 py-4 space-y-4"
+    >
+      {#if !modelsLoaded}
+        <!-- Loading skeleton to avoid the empty-flash. -->
+        <div class="h-full flex items-center justify-center text-sm text-muted">Loading…</div>
+      {:else if modelsLoadError}
         <div class="h-full flex items-center justify-center">
-          <div class="max-w-md w-full space-y-6">
-            <div class="text-center space-y-2">
-              <h2 class="text-xl font-bold text-heading">pick a model · ask anything</h2>
+          <div class="max-w-md w-full space-y-3 text-center">
+            <h2 class="text-lg font-semibold text-heading">Can't reach the backend.</h2>
+            <p class="text-sm text-muted">{modelsLoadError}</p>
+            <Button variant="primary" onclick={() => go('diagnostic')}>Open Diagnostic →</Button>
+          </div>
+        </div>
+      {:else if models.length === 0}
+        <!-- First-run welcome: zero chat models on disk. -->
+        <div class="h-full flex items-center justify-center">
+          <div class="max-w-xl w-full space-y-5">
+            <div class="text-center space-y-1.5">
+              <h2 class="text-2xl font-bold text-heading">Welcome to Octopus.</h2>
               <p class="text-sm text-muted">
-                Stream tokens with live timing. Stats appear in the sidebar.
+                You'll chat with AI models running on your own computer — nothing leaves this
+                machine.
               </p>
             </div>
             <div class="space-y-2">
-              <div class="text-xs text-muted font-mono uppercase tracking-wider">
-                try one of these
+              <div class="text-xs text-muted uppercase tracking-wider font-mono">
+                Get your first model
               </div>
-              {#each examplePrompts as p (p)}
+              {#each starterModels as s, i (s.name)}
+                <button
+                  onclick={() => {
+                    setModel(s.name);
+                    go('pull');
+                  }}
+                  class="block w-full text-left bg-surface border border-border rounded p-3 hover:border-accent transition-colors"
+                >
+                  <div class="flex items-baseline justify-between gap-3 mb-1">
+                    <div class="font-mono text-sm font-medium text-heading">{s.name}</div>
+                    <div class="text-xs text-muted font-mono">{s.size}</div>
+                  </div>
+                  <div class="text-sm text-body">{s.desc}</div>
+                  <div class="text-xs text-accent mt-1 font-mono">
+                    Install {i === 0 ? '(recommended for starters)' : ''} →
+                  </div>
+                </button>
+              {/each}
+            </div>
+            <div class="text-center text-xs text-muted">
+              <button
+                onclick={() => go('pull')}
+                class="bg-transparent border-0 p-0 text-accent hover:underline cursor-pointer font-mono text-xs"
+              >
+                Browse all options →
+              </button>
+            </div>
+          </div>
+        </div>
+      {:else if messages.length === 0}
+        <!-- Chat empty state — model is selected; pull a starter prompt
+             from modelHints so the user has a one-click way to start. -->
+        <div class="h-full flex items-center justify-center">
+          <div class="max-w-lg w-full space-y-5">
+            <div class="text-center space-y-1.5">
+              <h2 class="text-xl font-semibold text-heading">
+                Chatting with <span class="font-mono">{selectedModel.value}</span>
+              </h2>
+              {#if currentHints?.bestFor}
+                <p class="text-sm text-muted">Best for {currentHints.bestFor}.</p>
+              {/if}
+            </div>
+            {#if currentHints?.tryPrompt}
+              <Button
+                variant="primary"
+                size="lg"
+                onclick={() => {
+                  input = currentHints.tryPrompt;
+                  send();
+                }}
+              >
+                Try: {currentHints.tryPrompt.length > 60
+                  ? currentHints.tryPrompt.slice(0, 60) + '…'
+                  : currentHints.tryPrompt}
+              </Button>
+            {/if}
+            <div class="space-y-2">
+              <div class="text-xs text-muted font-mono uppercase tracking-wider">
+                or try one of these
+              </div>
+              {#each fallbackPrompts as p (p)}
                 <button
                   onclick={() => useExample(p)}
                   class="block w-full text-left text-sm bg-surface border border-border rounded p-2.5 hover:border-accent hover:bg-surface-2 transition-colors text-body"
@@ -255,14 +386,9 @@
           </div>
           {#if msg.role === 'assistant'}
             {#if msg.thinking}
-              <details class="text-xs text-muted mb-1 group/think">
-                <summary
-                  class="cursor-pointer font-mono uppercase tracking-wider hover:text-body select-none"
-                >
-                  <span class="opacity-60">▸</span> thinking
-                  {#if !msg.content}
-                    <span class="ml-1 italic">(reasoning…)</span>
-                  {/if}
+              <details class="text-xs text-muted mb-1">
+                <summary class="cursor-pointer font-mono hover:text-body select-none">
+                  thinking{!msg.content ? '…' : ''}
                 </summary>
                 <div
                   class="mt-1.5 pl-3 border-l-2 border-border italic font-sans whitespace-pre-wrap leading-relaxed"
@@ -276,10 +402,10 @@
                 <!-- eslint-disable-next-line svelte/no-at-html-tags — DOMPurify-sanitized in markdown.js -->
                 {@html renderMarkdown(msg.content)}
               {:else if streaming && i === messages.length - 1 && msg.thinking}
-                <span class="text-muted italic">drafting answer…</span>
+                <span class="text-muted italic">Drafting answer…</span>
               {:else if streaming && i === messages.length - 1 && warmupActive}
                 <span class="text-muted italic"
-                  >warming up {msg.model} into VRAM (cold-start can take ~10s)…</span
+                  >Loading {msg.model} into memory (first request can take ~10s)…</span
                 >
               {/if}{#if streaming && i === messages.length - 1}<span
                   class="inline-block w-2 h-4 bg-accent animate-pulse ml-0.5 align-middle"
@@ -289,75 +415,116 @@
             <div class="whitespace-pre-wrap text-heading">{msg.content}</div>
           {/if}
           {#if msg.role === 'assistant' && msg.stats?.tokens_per_sec}
-            <div class="text-xs text-muted font-mono pt-1">
-              {msg.stats.tokens_per_sec} tok/s · TTFT {msg.stats.ttft_ms}ms · {msg.stats.eval_count} tokens
-              · {(msg.stats.total_ms / 1000).toFixed(1)}s
+            <!-- Per-message metrics with hover tooltips that translate the
+                 jargon. Keeps mono units as data; uses sentence-case labels. -->
+            <div class="text-xs text-muted font-mono pt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+              <span title="How fast the model is producing text (tokens ≈ ¾ of a word)">
+                Speed <span class="text-body">{msg.stats.tokens_per_sec} tok/s</span>
+              </span>
+              <span aria-hidden="true" class="opacity-50">·</span>
+              <span title="Time until the model produced the first token of its reply">
+                First reply <span class="text-body">{msg.stats.ttft_ms}ms</span>
+              </span>
+              <span aria-hidden="true" class="opacity-50">·</span>
+              <span title="Total tokens generated in this reply">
+                Length <span class="text-body">{msg.stats.eval_count} tok</span>
+              </span>
+              <span aria-hidden="true" class="opacity-50">·</span>
+              <span title="Total wall-clock time for this reply">
+                Total <span class="text-body">{(msg.stats.total_ms / 1000).toFixed(1)}s</span>
+              </span>
             </div>
           {/if}
         </div>
       {/each}
     </div>
 
-    <div class="border-t border-border bg-surface px-4 py-3">
-      <div class="flex gap-2 items-end">
-        <textarea
-          bind:this={inputEl}
-          bind:value={input}
-          onkeydown={onKey}
-          placeholder="message {selectedModel.value || '…'}"
-          rows="2"
-          class="flex-1 bg-surface-2 border border-border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-accent text-body"
-          disabled={streaming}
-        ></textarea>
-        {#if streaming}
-          <Button variant="danger" size="lg" onclick={stop} ariaLabel="Stop generation">
-            stop
-          </Button>
+    {#if models.length > 0}
+      <div class="border-t border-border bg-surface px-4 py-3">
+        <div class="flex gap-2 items-end">
+          <textarea
+            bind:this={inputEl}
+            bind:value={input}
+            onkeydown={onKey}
+            {placeholder}
+            rows="2"
+            class="flex-1 bg-surface-2 border border-border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-accent text-body disabled:opacity-60"
+            disabled={streaming || !selectedModel.value}
+            aria-label="Message"
+          ></textarea>
+          {#if streaming}
+            <Button variant="danger" size="lg" onclick={stop} ariaLabel="Stop generation">
+              Stop
+            </Button>
+          {:else}
+            <Button
+              variant="primary"
+              size="lg"
+              onclick={() => send()}
+              disabled={!canSend}
+              ariaLabel={canSend ? 'Send message' : 'Pick a model and type a message to send'}
+            >
+              Send
+            </Button>
+          {/if}
+        </div>
+        {#if !selectedModel.value}
+          <div class="text-xs text-muted mt-1.5">
+            Pick a model in the dropdown above to start chatting.
+          </div>
         {:else}
-          <Button variant="primary" size="lg" onclick={() => send()} disabled={!input.trim()}>
-            send
-          </Button>
+          <div class="text-[11px] text-muted mt-1.5 font-mono opacity-70">
+            Enter to send · Shift+Enter for a new line
+          </div>
         {/if}
       </div>
-    </div>
+    {/if}
   </main>
 
   <!-- Telemetry sidebar -->
   <aside
-    class="w-80 border-l border-border bg-surface overflow-y-auto p-4 text-sm space-y-5 font-mono hidden lg:block"
+    class="w-80 border-l border-border bg-surface overflow-y-auto p-4 text-sm space-y-5 hidden lg:block"
   >
     <section>
-      <h2 class="text-xs uppercase tracking-wider text-muted mb-2">last response</h2>
+      <h2 class="text-xs uppercase tracking-wider text-muted mb-2 font-mono">Last response</h2>
       {#if liveStat}
-        <div class="space-y-1">
-          <div class="flex justify-between">
-            <span class="text-muted">tokens/sec</span><span class="text-accent"
-              >{liveStat.tokens_per_sec ?? '–'}</span
-            >
+        <div class="space-y-1 font-mono">
+          <div
+            class="flex justify-between"
+            title="How fast the model produced text (tokens ≈ ¾ of a word)"
+          >
+            <span class="text-muted">Speed</span>
+            <span class="text-accent">{liveStat.tokens_per_sec ?? '–'} tok/s</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-muted">TTFT</span><span>{liveStat.ttft_ms ?? '–'}ms</span>
+          <div class="flex justify-between" title="Time until the first token of the reply">
+            <span class="text-muted">First reply</span>
+            <span>{liveStat.ttft_ms ?? '–'}ms</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-muted">tokens</span><span>{liveStat.eval_count ?? '–'}</span>
+          <div class="flex justify-between" title="Total tokens in this reply">
+            <span class="text-muted">Length</span>
+            <span>{liveStat.eval_count ?? '–'} tok</span>
           </div>
-          <div class="flex justify-between">
-            <span class="text-muted">total</span><span
-              >{liveStat.total_ms ? (liveStat.total_ms / 1000).toFixed(1) + 's' : '–'}</span
-            >
+          <div class="flex justify-between" title="Total wall-clock time for this reply">
+            <span class="text-muted">Total time</span>
+            <span>{liveStat.total_ms ? (liveStat.total_ms / 1000).toFixed(1) + 's' : '–'}</span>
           </div>
         </div>
       {:else}
-        <div class="text-muted text-xs">no response yet</div>
+        <div class="text-muted text-xs">No response yet.</div>
       {/if}
     </section>
 
     <section>
-      <h2 class="text-xs uppercase tracking-wider text-muted mb-2">loaded in vram</h2>
+      <h2
+        class="text-xs uppercase tracking-wider text-muted mb-2 font-mono"
+        title="Models currently warmed into RAM/VRAM"
+      >
+        In memory
+      </h2>
       {#if loaded.length === 0}
-        <div class="text-muted text-xs">none</div>
+        <div class="text-muted text-xs">Nothing loaded right now.</div>
       {:else}
-        <div class="space-y-2">
+        <div class="space-y-2 font-mono">
           {#each loaded as m (m.name)}
             <div class="bg-surface-2 rounded p-2 border border-border">
               <div class="text-body text-xs truncate">{m.name}</div>
@@ -372,16 +539,16 @@
     </section>
 
     <section>
-      <h2 class="text-xs uppercase tracking-wider text-muted mb-2">gpu</h2>
+      <h2 class="text-xs uppercase tracking-wider text-muted mb-2 font-mono">GPU</h2>
       {#if !gpu || !gpu.available}
-        <div class="text-muted text-xs">not available</div>
+        <div class="text-muted text-xs">Not available.</div>
       {:else}
         {#each gpu.gpus as g (g.name)}
-          <div class="space-y-1.5">
+          <div class="space-y-1.5 font-mono">
             <div class="text-body text-xs truncate">{g.name}</div>
             <div>
               <div class="flex justify-between text-xs mb-0.5">
-                <span class="text-muted">vram</span>
+                <span class="text-muted" title="GPU memory in use">vram</span>
                 <span
                   >{(g.memory_used_mb / 1024).toFixed(1)} / {(g.memory_total_mb / 1024).toFixed(0)} GB</span
                 >
@@ -395,7 +562,7 @@
             </div>
             <div>
               <div class="flex justify-between text-xs mb-0.5">
-                <span class="text-muted">util</span>
+                <span class="text-muted" title="GPU utilization right now">util</span>
                 <span>{g.utilization_pct}%</span>
               </div>
               <div class="h-1.5 bg-surface-2 rounded overflow-hidden">

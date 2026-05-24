@@ -4,9 +4,15 @@
   import { route, go } from '../stores/route.svelte.js';
   import { getLoaded, getGpu } from '../api.js';
 
+  // Primary nav lives at the top now (was split across header/footer, which
+  // forced users to scan both surfaces to find any given page).
   const primaryTabs = [
-    { id: 'chat', label: 'chat' },
-    { id: 'models', label: 'models' }
+    { id: 'chat', label: 'Chat' },
+    { id: 'models', label: 'Models' },
+    { id: 'pull', label: 'Install' },
+    { id: 'storage', label: 'Storage' },
+    { id: 'system', label: 'System' },
+    { id: 'diagnostic', label: 'Diagnostic' }
   ];
 
   function navClass(id) {
@@ -18,8 +24,9 @@
     }`;
   }
 
-  // Compact telemetry strip — same data the chat sidebar uses, polled
-  // every 3s so it doesn't compete with the activity poller's 250ms tick.
+  // Compact telemetry strip — polled every 3s so it doesn't compete with the
+  // activity poller's 250ms tick. "In memory" is the canonical phrase for
+  // models warmed into RAM/VRAM (vs. "installed" for on-disk total).
   let loaded = $state([]);
   /** @type {{available:boolean, gpus?: Array<any>} | null} */
   let gpu = $state(null);
@@ -45,14 +52,14 @@
 </script>
 
 <header class="border-b border-border bg-surface">
-  <div class="flex items-center px-4 py-3 gap-6 font-mono text-sm">
+  <div class="flex items-center px-4 py-3 gap-6 text-sm">
     <button
       onclick={() => go('chat')}
-      class="flex items-center gap-2 bg-transparent border-0 p-0 cursor-pointer text-heading hover:opacity-80 transition-opacity"
+      class="flex items-center gap-2 bg-transparent border-0 p-0 cursor-pointer text-heading hover:text-accent transition-colors"
       aria-label="Octopus home"
     >
       <OctoLogo size={18} />
-      <span class="font-medium tracking-tight">octopus</span>
+      <span class="font-medium tracking-tight">Octopus</span>
     </button>
 
     <nav class="flex items-center gap-5" aria-label="Primary">
@@ -67,18 +74,20 @@
       {/each}
     </nav>
 
-    <!-- Live system stats — hidden on small screens. -->
+    <!-- Live system stats — hidden on small screens. role=status makes screen
+         readers treat updates as polite live regions, not focusable widgets. -->
     <div
-      class="ml-auto hidden md:flex items-center gap-3 text-xs text-muted"
+      class="ml-auto hidden md:flex items-center gap-3 text-xs text-muted font-mono"
+      role="status"
       aria-label="System telemetry"
     >
-      <span class="whitespace-nowrap">
+      <span class="whitespace-nowrap" title="Models currently warmed into memory (RAM/VRAM)">
         <span class="text-heading">{loaded.length}</span>
-        {loaded.length === 1 ? 'model' : 'models'} loaded
+        in memory
       </span>
       {#if primaryGpu}
         <span aria-hidden="true" class="opacity-50">·</span>
-        <span class="flex items-center gap-2 whitespace-nowrap">
+        <span class="flex items-center gap-2 whitespace-nowrap" title="GPU memory in use">
           <span>vram</span>
           <span class="inline-block w-20 h-1.5 bg-surface-2 rounded overflow-hidden align-middle">
             <span class="block h-full bg-accent" style="width: {vramPct.toFixed(1)}%"></span>
@@ -88,11 +97,13 @@
           </span>
         </span>
         <span aria-hidden="true" class="opacity-50">·</span>
-        <span class="whitespace-nowrap">
+        <span class="whitespace-nowrap" title="GPU utilization">
           util <span class="text-heading">{primaryGpu.utilization_pct}%</span>
         </span>
         <span aria-hidden="true" class="opacity-50">·</span>
-        <span class="whitespace-nowrap text-heading">{primaryGpu.temp_c}°C</span>
+        <span class="whitespace-nowrap text-heading" title="GPU temperature">
+          {primaryGpu.temp_c}°C
+        </span>
       {/if}
     </div>
   </div>

@@ -21,10 +21,13 @@
     { id: 'dark', label: 'Dark', desc: 'Black canvas, phosphor green' }
   ];
 
+  // Dev/internal pages — kept out of the primary nav since they're not
+  // load-bearing for a first-time user.
   const morePages = [
-    { id: 'design', label: 'Design system', desc: 'Tokens, primitives, component examples' },
+    { id: 'about', label: 'About', desc: 'What this is and why it exists' },
     { id: 'roadmap', label: 'Roadmap', desc: 'What is shipped and what is next' },
-    { id: 'about', label: 'About', desc: 'What this is and why it exists' }
+    { id: 'design', label: 'Design system', desc: 'Tokens, primitives, component examples' },
+    { id: 'labs', label: 'Labs', desc: 'Logo color experiments (dev sandbox)' }
   ];
 </script>
 
@@ -37,7 +40,7 @@
 
     <!-- Default model -->
     <Card padding="lg">
-      <Section title="default chat model">
+      <Section title="Default chat model">
         <p class="text-xs text-muted mb-2">
           Pre-selected when you open Chat. You can still switch from the dropdown there.
         </p>
@@ -58,7 +61,7 @@
 
     <!-- Theme -->
     <Card padding="lg">
-      <Section title="theme">
+      <Section title="Theme">
         <p class="text-xs text-muted mb-2">Also togglable from the moon/sun icon in the footer.</p>
         <div class="grid grid-cols-2 gap-2">
           {#each themes as t (t.id)}
@@ -79,18 +82,18 @@
 
     <!-- Storage info -->
     <Card padding="lg">
-      <Section title="local data">
+      <Section title="Local data">
         <p class="text-xs text-muted leading-relaxed">
-          Octopus stores theme + default-model in your browser's localStorage. There is no server
-          state, no telemetry, and no account. Clearing site data resets these to defaults.
+          Octopus saves your theme and default model in this browser. No accounts, no servers, no
+          tracking. Clear site data to reset.
         </p>
       </Section>
     </Card>
 
     <!-- More pages -->
     <Card padding="lg">
-      <Section title="more">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <Section title="More">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {#each morePages as p (p.id)}
             <button
               onclick={() => go(p.id)}

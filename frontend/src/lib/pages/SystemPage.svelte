@@ -70,7 +70,7 @@
       <div>
         <h1 class="text-2xl font-bold text-heading mb-1">System</h1>
         <p class="text-sm text-muted">
-          Live view of host hardware, Ollama runtime, GPU, and model inventory. Refreshes every 2s.
+          Live view of your hardware, Ollama runtime, and what's loaded right now.
         </p>
       </div>
       <div class="text-xs font-mono text-muted">
@@ -103,10 +103,10 @@
       <Card padding="lg">
         <Section title="inventory">
           <div class="space-y-1.5">
-            <StatRow label="models installed" value={allModels.length} accent />
+            <StatRow label="installed" value={allModels.length} accent />
             <StatRow label="total parameters" value="{totalParamsB.toFixed(1)}B" />
             <StatRow label="total disk used" value={fmtBytes(totalModelBytes)} />
-            <StatRow label="loaded in vram" value="{loaded.length} ({fmtBytes(loadedVramBytes)})" />
+            <StatRow label="in memory" value="{loaded.length} ({fmtBytes(loadedVramBytes)})" />
           </div>
         </Section>
       </Card>
@@ -231,10 +231,10 @@
 
     <!-- Loaded models -->
     <Card padding="lg">
-      <Section title="loaded in vram">
+      <Section title="in memory">
         {#if loaded.length === 0}
           <div class="text-muted text-sm">
-            No models currently loaded. Send a message in chat to warm one up.
+            Nothing loaded right now. Send a message in Chat to warm a model up.
           </div>
         {:else}
           <div class="space-y-2">
@@ -243,23 +243,23 @@
                 <div class="flex items-baseline justify-between gap-3 flex-wrap">
                   <div class="font-mono text-heading">{m.name}</div>
                   <div class="flex items-center gap-2">
-                    <Tag tone="success">live</Tag>
+                    <Tag tone="success">ready</Tag>
                     <span class="text-xs text-muted font-mono">
                       {fmtParams(m.details?.parameter_size)} · {m.details?.quantization_level}
                     </span>
                   </div>
                 </div>
                 <div class="grid grid-cols-3 gap-3 text-xs font-mono mt-2">
-                  <div>
-                    <div class="text-muted text-[10px] uppercase">vram</div>
+                  <div title="GPU memory this model is using">
+                    <div class="text-muted text-[10px] uppercase">memory used</div>
                     <div class="text-body">{fmtBytes(m.size_vram)}</div>
                   </div>
-                  <div>
-                    <div class="text-muted text-[10px] uppercase">disk</div>
+                  <div title="Disk size">
+                    <div class="text-muted text-[10px] uppercase">on disk</div>
                     <div class="text-body">{fmtBytes(m.size)}</div>
                   </div>
-                  <div>
-                    <div class="text-muted text-[10px] uppercase">context</div>
+                  <div title="How much conversation history the model can hold at once">
+                    <div class="text-muted text-[10px] uppercase">memory window</div>
                     <div class="text-body">{m.context_length || '—'}</div>
                   </div>
                 </div>

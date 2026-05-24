@@ -3,16 +3,21 @@
   import { route, go } from '../stores/route.svelte.js';
   import { connection, markOk, markFail } from '../stores/connection.svelte.js';
   import { onMount, onDestroy } from 'svelte';
-  import { getModels } from '../api.js';
+  import { getModels, getOllamaInfo } from '../api.js';
 
+  // Footer is status-only now (nav moved to Header). Carries: connection
+  // health, installed-on-disk count, ollama version, and the utility cluster
+  // (github / theme / settings). One scannable line.
   let modelCount = $state(0);
+  let ollamaVersion = $state(null);
   /** @type {ReturnType<typeof setInterval> | undefined} */
   let pollHandle;
 
   async function check() {
     try {
-      const m = await getModels();
+      const [m, info] = await Promise.all([getModels(), getOllamaInfo()]);
       modelCount = m.length;
+      ollamaVersion = info?.reachable ? info.version : null;
       markOk();
     } catch (_e) {
       markFail();
@@ -28,73 +33,46 @@
 
   onDestroy(() => clearInterval(pollHandle));
 
-  /** @type {string} */
-  const githubUrl = 'https://github.com/seheart/octopus';
-
   const isDark = $derived(theme.value === 'dark');
-
-  const navItems = [
-    { id: 'pull', label: 'pull' },
-    { id: 'system', label: 'system' },
-    { id: 'storage', label: 'storage' },
-    { id: 'diagnostic', label: 'diagnostic' },
-    { id: 'design', label: 'design' },
-    { id: 'labs', label: 'labs' }
-  ];
-
-  function navClass(id) {
-    const active = route.page === id;
-    return `bg-transparent border-0 p-0 cursor-pointer transition-colors whitespace-nowrap ${
-      active
-        ? 'text-accent underline underline-offset-4 decoration-1'
-        : 'text-muted hover:text-accent'
-    }`;
-  }
 </script>
 
 <footer class="border-t border-border bg-surface">
   <div
     class="flex flex-wrap items-center justify-between px-4 py-1.5 text-xs font-mono gap-x-4 gap-y-1.5"
   >
-    <!-- Left: status -->
-    <div class="flex items-center gap-3 md:order-1">
+    <!-- Left: status line — one truth per item. "Installed" = on disk; the
+         header's "in memory" count is the warmed-into-RAM number. -->
+    <div class="flex items-center gap-3">
       <span
         class="flex items-center gap-1.5 whitespace-nowrap"
-        title={connected ? 'Ollama connected' : 'Ollama unreachable'}
+        title={connected
+          ? `Ollama reachable${ollamaVersion ? ' · v' + ollamaVersion : ''}`
+          : 'Octopus cannot reach Ollama on this machine'}
       >
         <span
           class="inline-block w-2 h-2 rounded-full {connected ? 'bg-success' : 'bg-error'}"
           aria-hidden="true"
         ></span>
         <span class={connected ? 'text-success' : 'text-error'}>
-          {connected ? 'ollama' : 'ollama offline'}
+          {connected ? 'Ollama connected' : 'Ollama offline'}
         </span>
+        {#if connected && ollamaVersion}
+          <span class="text-muted hidden lg:inline">v{ollamaVersion}</span>
+        {/if}
       </span>
       <span class="text-muted hidden sm:inline" aria-hidden="true">·</span>
-      <span class="text-muted hidden sm:inline whitespace-nowrap">{modelCount} models</span>
+      <span
+        class="text-muted hidden sm:inline whitespace-nowrap"
+        title="Models downloaded to this machine"
+      >
+        {modelCount} installed
+      </span>
     </div>
 
-    <!-- Center: secondary nav. Source order is last so it wraps to its own
-         row when narrow; on md+ flex order puts it in the middle. -->
-    <nav
-      class="flex items-center gap-x-4 gap-y-1 flex-wrap justify-center w-full order-last md:w-auto md:flex-1 md:order-2"
-      aria-label="Footer navigation"
-    >
-      {#each navItems as item (item.id)}
-        <button
-          onclick={() => go(item.id)}
-          aria-current={route.page === item.id ? 'page' : undefined}
-          class={navClass(item.id)}
-        >
-          {item.label}
-        </button>
-      {/each}
-    </nav>
-
     <!-- Right: utility cluster (github, theme, settings) -->
-    <div class="flex items-center gap-1 md:order-3">
+    <div class="flex items-center gap-1">
       <a
-        href={githubUrl}
+        href="https://github.com/seheart/octopus"
         target="_blank"
         rel="noopener noreferrer"
         class="text-muted hover:text-accent transition-colors no-underline flex items-center p-1"

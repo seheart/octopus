@@ -1,7 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { getModels, pullModel } from '../api.js';
-  import { go } from '../stores/route.svelte.js';
+  import { getModels, pullModel, fmtBytes } from '../api.js';
   import { setModel, selectedModel } from '../stores/model.svelte.js';
   import { Button, Card, Section } from '../components/ui/index.js';
 
@@ -11,14 +10,18 @@
   let pulling = $state(false);
   let pullStatus = $state('');
   let pullPct = $state(null);
+  let pullTotal = $state(null);
+  let pullCompleted = $state(null);
   let pullError = $state(null);
   let currentPull = $state(null);
 
-  // Curated suggestions, grouped so people can learn what each family is for.
-  // Sizes are approximate — they're educational, not load-bearing.
+  // Track bytes/sec with a small rolling sample so the ETA isn't jittery.
+  let lastSample = $state({ at: 0, bytes: 0 });
+  let bytesPerSec = $state(0);
+
   const groups = [
     {
-      heading: 'general · everyday chat',
+      heading: 'General · everyday chat',
       tip: 'Good defaults. Quick to load, decent quality.',
       items: [
         {
@@ -49,7 +52,7 @@
       ]
     },
     {
-      heading: 'reasoning · thinks before answering',
+      heading: 'Reasoning · thinks before answering',
       tip: 'Streams a "thinking" trace before the answer. Slower, but better at multi-step problems.',
       items: [
         {
@@ -70,7 +73,7 @@
       ]
     },
     {
-      heading: 'code · written for programming',
+      heading: 'Code · written for programming',
       tip: 'Tuned on code corpora — better at completing, explaining, and refactoring.',
       items: [
         {
@@ -86,7 +89,7 @@
       ]
     },
     {
-      heading: 'embeddings · for search / RAG',
+      heading: 'Embeddings · for search / RAG',
       tip: "These don't chat — they convert text to vectors. Use them when you're building search.",
       items: [
         {
@@ -107,7 +110,7 @@
     try {
       installed = await getModels();
     } catch (_e) {
-      // Non-fatal — just means we can't dim already-installed suggestions.
+      /* non-fatal */
     }
   }
 
@@ -117,29 +120,64 @@
     return installed.some((m) => m.name === name || m.name.startsWith(name + ':'));
   }
 
+  // Translate Ollama's wire-level status strings to user-facing phases.
+  function friendlyStatus(raw) {
+    if (!raw) return '';
+    const s = raw.toLowerCase();
+    if (s.includes('pulling manifest')) return 'Looking up model…';
+    if (s.includes('verifying')) return 'Checking integrity…';
+    if (s.includes('writing manifest')) return 'Finishing up…';
+    if (s === 'success' || s === 'done') return 'Installed.';
+    if (s.startsWith('pulling ') || s.startsWith('downloading')) return 'Downloading…';
+    if (s === 'starting…') return 'Starting…';
+    return raw;
+  }
+
+  function fmtEta(seconds) {
+    if (!isFinite(seconds) || seconds <= 0) return '';
+    if (seconds < 60) return `${Math.round(seconds)}s left`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return s ? `${m}m ${s}s left` : `${m}m left`;
+  }
+
   async function startPull(name = pullName) {
     const target = name.trim();
     if (!target || pulling) return;
     pulling = true;
     pullStatus = 'starting…';
     pullPct = null;
+    pullTotal = null;
+    pullCompleted = null;
     pullError = null;
     pullName = target;
+    bytesPerSec = 0;
+    lastSample = { at: Date.now(), bytes: 0 };
 
     try {
       currentPull = pullModel(target, (evt) => {
         if (evt.status === 'error') {
-          pullError = evt.error || 'pull failed';
+          pullError = evt.error || 'install failed';
           return;
         }
         pullStatus = evt.status;
-        if (evt.total && evt.completed !== null && evt.completed !== undefined) {
-          pullPct = Math.min(100, (evt.completed / evt.total) * 100);
+        if (typeof evt.total === 'number') pullTotal = evt.total;
+        if (typeof evt.completed === 'number') {
+          pullCompleted = evt.completed;
+          if (pullTotal) pullPct = Math.min(100, (pullCompleted / pullTotal) * 100);
+          // Bytes/sec EMA over a ~3s window for ETA smoothing.
+          const now = Date.now();
+          const dtMs = now - lastSample.at;
+          if (dtMs > 300) {
+            const inst = ((pullCompleted - lastSample.bytes) / dtMs) * 1000;
+            bytesPerSec = bytesPerSec ? bytesPerSec * 0.7 + inst * 0.3 : inst;
+            lastSample = { at: now, bytes: pullCompleted };
+          }
         }
       });
       await currentPull.done;
       if (!pullError) {
-        pullStatus = 'done';
+        pullStatus = 'success';
         await refresh();
         if (!selectedModel.value) setModel(target);
       }
@@ -161,80 +199,101 @@
       startPull();
     }
   }
+
+  const etaSeconds = $derived(
+    pulling && bytesPerSec > 0 && pullTotal && pullCompleted !== null
+      ? (pullTotal - pullCompleted) / bytesPerSec
+      : 0
+  );
+  const friendly = $derived(friendlyStatus(pullStatus));
+  const isDone = $derived(pullStatus === 'success' || pullStatus === 'done');
 </script>
 
 <div class="h-full overflow-y-auto px-6 py-6">
   <div class="max-w-5xl mx-auto space-y-6">
-    <div class="flex items-baseline gap-3">
-      <button
-        onclick={() => go('models')}
-        class="text-xs font-mono text-muted hover:text-accent transition-colors"
-        aria-label="Back to Models"
-      >
-        ← Models
-      </button>
-      <h1 class="text-2xl font-bold text-heading">Add a model</h1>
+    <div>
+      <h1 class="text-2xl font-bold text-heading">Install a model</h1>
+      <p class="text-sm text-muted mt-1 max-w-2xl">
+        Pick one from below, or type the name of any model from
+        <a
+          href="https://ollama.com/library"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-accent hover:underline">ollama.com/library</a
+        >. Downloads run in the background and you can keep using the app.
+      </p>
     </div>
-    <p class="text-sm text-muted max-w-2xl">
-      Pulls from Ollama's registry. Type a model name (e.g. <code
-        class="font-mono text-body bg-surface-2 px-1 rounded">qwen3:8b</code
-      >) or pick from the suggestions below. Names follow
-      <code class="font-mono text-body bg-surface-2 px-1 rounded">family[:tag]</code> — leave the tag
-      off for the default.
-    </p>
 
     <Card padding="lg">
-      <Section title="pull by name">
+      <Section title="Install by name">
         <div class="flex gap-2 items-center mb-3">
           <input
             type="text"
             bind:value={pullName}
             onkeydown={onPullKey}
-            placeholder="model name (e.g. qwen3:8b, llama3.2:3b)"
+            placeholder="e.g. qwen3:8b, llama3.2:3b"
             disabled={pulling}
             class="flex-1 bg-surface-2 border border-border rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-accent text-body disabled:opacity-50"
+            aria-label="Model name to install"
           />
           {#if pulling}
-            <Button variant="secondary" onclick={cancelPull}>cancel</Button>
+            <Button variant="secondary" onclick={cancelPull}>Cancel</Button>
           {:else}
             <Button variant="primary" onclick={() => startPull()} disabled={!pullName.trim()}>
-              pull
+              Install
             </Button>
           {/if}
         </div>
 
-        {#if pulling || pullError || pullStatus === 'done'}
-          <div class="bg-surface-2 border border-border rounded p-3 font-mono text-xs">
-            <div class="flex justify-between mb-1">
-              <span class="text-body">{pullName || '—'}</span>
-              <span class="text-muted">
+        {#if pulling || pullError || isDone}
+          <div class="bg-surface-2 border border-border rounded p-3 font-mono text-xs space-y-1.5">
+            <div class="flex justify-between gap-3">
+              <span class="text-body truncate">{pullName || '—'}</span>
+              <span class="text-muted shrink-0">
                 {#if pullError}
                   <span class="text-error">{pullError}</span>
+                {:else if isDone}
+                  <span class="text-success">✓ Installed</span>
                 {:else}
-                  {pullStatus}
-                  {#if pullPct !== null}
-                    · {pullPct.toFixed(1)}%
-                  {/if}
+                  {friendly}
                 {/if}
               </span>
             </div>
-            {#if pullPct !== null && !pullError}
+            {#if pullPct !== null && !pullError && !isDone}
               <div class="h-1.5 bg-canvas rounded overflow-hidden">
                 <div class="h-full bg-accent transition-all" style="width: {pullPct}%"></div>
+              </div>
+              <div class="flex justify-between text-muted">
+                <span>
+                  {pullPct.toFixed(0)}%
+                  {#if pullCompleted !== null && pullTotal}
+                    · {fmtBytes(pullCompleted)} / {fmtBytes(pullTotal)}
+                  {/if}
+                </span>
+                <span>
+                  {#if bytesPerSec > 0}
+                    {fmtBytes(bytesPerSec)}/s
+                  {/if}
+                  {#if etaSeconds > 0}
+                    · {fmtEta(etaSeconds)}
+                  {/if}
+                </span>
               </div>
             {/if}
           </div>
         {/if}
 
         <p class="text-xs text-muted mt-3">
-          Browse the full catalog at
+          Names follow <code class="font-mono text-body bg-surface-2 px-1 rounded"
+            >family[:tag]</code
+          >
+          — leave the tag off to get the default. Browse the catalog at
           <a
             href="https://ollama.com/library"
             target="_blank"
             rel="noopener noreferrer"
             class="text-accent hover:underline">ollama.com/library</a
-          >
-          — copy any name from there into the box above.
+          >.
         </p>
       </Section>
     </Card>
@@ -258,16 +317,19 @@
               <p class="text-sm text-body leading-snug">{item.desc}</p>
               <div class="mt-auto pt-1">
                 {#if installed}
-                  <span class="text-[10px] uppercase tracking-wider font-mono text-success"
-                    >already installed</span
+                  <span
+                    class="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-mono text-success"
                   >
+                    <span class="w-1.5 h-1.5 rounded-full bg-success" aria-hidden="true"></span>
+                    Installed
+                  </span>
                 {:else}
                   <button
                     onclick={() => startPull(item.name)}
                     disabled={pulling}
-                    class="text-xs font-mono text-accent hover:underline disabled:opacity-40 disabled:no-underline"
+                    class="text-xs font-medium text-accent hover:underline disabled:opacity-40 disabled:no-underline bg-transparent border-0 p-0 cursor-pointer"
                   >
-                    pull this →
+                    Install →
                   </button>
                 {/if}
               </div>

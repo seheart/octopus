@@ -11,7 +11,7 @@
   } from '../api.js';
   import { go } from '../stores/route.svelte.js';
   import { setModel, selectedModel, setPendingPrompt } from '../stores/model.svelte.js';
-  import { Card } from '../components/ui/index.js';
+  import { Card, Button } from '../components/ui/index.js';
   import { modelHints } from '../modelHints.js';
   import Oscilloscope from '../components/Oscilloscope.svelte';
 
@@ -19,11 +19,6 @@
   let loaded = $state([]);
   let loading = $state(true);
   let err = $state(null);
-
-  // Delete confirmation per-model name
-  let confirmingDelete = $state('');
-
-  // Tracks which model is currently being unloaded (so we can show "stopping…")
   let unloadingName = $state('');
 
   /** @type {ReturnType<typeof setInterval> | undefined} */
@@ -43,7 +38,6 @@
 
   onMount(() => {
     refresh();
-    // Re-poll so the scope sees newly-loaded / unloaded models.
     pollHandle = setInterval(refresh, 2000);
   });
   onDestroy(() => clearInterval(pollHandle));
@@ -63,56 +57,65 @@
     go('chat');
   }
 
-  async function unload(name) {
+  async function unload(name, e) {
+    e?.stopPropagation();
     if (unloadingName) return;
     unloadingName = name;
     try {
       await unloadModel(name);
       await refresh();
-    } catch (e) {
-      err = e.message;
+    } catch (e2) {
+      err = e2.message;
     } finally {
       unloadingName = '';
     }
   }
 
-  async function confirmDelete(name) {
-    if (confirmingDelete !== name) {
-      confirmingDelete = name;
-      // Auto-clear confirm if user doesn't act in 5s
-      setTimeout(() => {
-        if (confirmingDelete === name) confirmingDelete = '';
-      }, 5000);
-      return;
-    }
+  async function confirmDelete(name, size, e) {
+    e?.stopPropagation();
+    // Native confirm shows the size being freed so the user knows what they
+    // get back. Cancel is a one-click out (no "click trash twice" puzzle).
+    const ok = confirm(
+      `Delete ${name}?\n\nThis frees ${fmtBytes(size)} on disk. The model can be re-installed later from the catalog.`
+    );
+    if (!ok) return;
     try {
       await deleteModel(name);
-      // If we deleted the currently-selected model, clear selection.
       if (selectedModel.value === name) setModel('');
-      confirmingDelete = '';
       await refresh();
-    } catch (e) {
-      err = e.message;
-      confirmingDelete = '';
+    } catch (e2) {
+      err = e2.message;
     }
   }
 </script>
 
 <div class="h-full flex flex-col lg:flex-row gap-6 px-6 py-6 overflow-hidden">
-  <!-- LEFT: live oscilloscope, big, always visible -->
-  <div class="lg:w-2/5 flex flex-col min-h-[280px] lg:min-h-0">
+  <!-- LEFT: live oscilloscope.  Collapses to a thin strip when nothing is
+       happening — a black rectangle saying "no models loaded" is visual
+       weight that teaches a novice nothing. -->
+  <div
+    class="lg:w-2/5 flex flex-col {loaded.length === 0 ? 'min-h-0' : 'min-h-[280px] lg:min-h-0'}"
+  >
     <div class="mb-2 shrink-0">
       <div class="text-xs font-mono text-muted uppercase tracking-wider">
-        live activity · {loaded.length}
-        {loaded.length === 1 ? 'model' : 'models'} in vram
+        Live activity · {loaded.length}
+        {loaded.length === 1 ? 'model' : 'models'} in memory
       </div>
       <div class="text-[10px] font-mono text-muted opacity-70 mt-0.5">
-        all Ollama clients · spikes per request
+        Every spike is one chat request, from any Ollama client on this machine.
       </div>
     </div>
-    <div class="flex-1 min-h-0">
-      <Oscilloscope models={loaded} />
-    </div>
+    {#if loaded.length === 0}
+      <div
+        class="rounded border border-dashed border-border bg-surface px-3 py-3 text-xs text-muted"
+      >
+        Live token activity will appear here once a model is warm in memory.
+      </div>
+    {:else}
+      <div class="flex-1 min-h-0">
+        <Oscilloscope models={loaded} />
+      </div>
+    {/if}
   </div>
 
   <!-- RIGHT: header + installed models, scrollable -->
@@ -121,37 +124,34 @@
       <div>
         <h1 class="text-2xl font-bold text-heading mb-1">Models</h1>
         <p class="text-sm text-muted">
-          All Ollama models on this machine. Click a card to chat with it.
+          Everything installed on this machine. Click a card to chat with it.
         </p>
       </div>
-      <button
-        onclick={() => go('pull')}
-        class="text-sm font-mono px-3 py-1.5 bg-surface-2 border border-border rounded hover:border-accent hover:text-accent transition-colors text-body shrink-0"
-      >
-        + Add a model
-      </button>
+      <Button variant="secondary" size="md" onclick={() => go('pull')}>+ Add a model</Button>
     </div>
 
-    <!-- Installed -->
     <div>
       <div class="text-xs font-mono text-muted uppercase tracking-wider mb-2">
-        installed · {models.length}
+        Installed · {models.length}
       </div>
 
       {#if loading}
-        <div class="text-muted text-sm font-mono">loading…</div>
+        <div class="text-muted text-sm font-mono">Loading…</div>
       {:else if err}
-        <div class="text-error text-sm font-mono">error: {err}</div>
+        <Card>
+          <div class="text-center text-sm py-6 space-y-3">
+            <div class="text-error">Couldn't load your models.</div>
+            <div class="flex justify-center gap-2">
+              <Button variant="secondary" onclick={refresh}>Try again</Button>
+              <Button variant="ghost" onclick={() => go('diagnostic')}>Diagnose →</Button>
+            </div>
+          </div>
+        </Card>
       {:else if models.length === 0}
         <Card>
           <div class="text-center text-sm py-6 space-y-2">
             <div class="text-muted">No models installed yet.</div>
-            <button
-              onclick={() => go('pull')}
-              class="text-accent hover:underline font-mono text-sm"
-            >
-              Add a model →
-            </button>
+            <Button variant="primary" onclick={() => go('pull')}>Install your first →</Button>
           </div>
         </Card>
       {:else}
@@ -159,107 +159,113 @@
           {#each models as m (m.name)}
             {@const hints = modelHints(m)}
             {@const loadedNow = isLoaded(m.name)}
+            <!-- Whole-card click → pickModel. Inner buttons stopPropagation. -->
             <div
-              class="border rounded-lg p-4 transition-colors group flex flex-col {loadedNow
+              role="button"
+              tabindex={hints.chatCapable ? 0 : -1}
+              onclick={() => hints.chatCapable && pickModel(m.name)}
+              onkeydown={(e) => {
+                if (hints.chatCapable && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  pickModel(m.name);
+                }
+              }}
+              aria-label="Use {m.name} in chat"
+              aria-disabled={!hints.chatCapable}
+              class="border rounded-lg p-4 transition-colors group flex flex-col text-left {hints.chatCapable
+                ? 'cursor-pointer'
+                : 'cursor-default'} {loadedNow
                 ? 'bg-success/15 border-success/60 hover:border-success'
                 : 'bg-surface border-border hover:border-accent'}"
             >
               <div class="flex items-start justify-between mb-2 gap-2">
-                <button
-                  onclick={() => hints.chatCapable && pickModel(m.name)}
-                  disabled={!hints.chatCapable}
-                  class="text-left flex-1 min-w-0 disabled:cursor-default"
-                  aria-label="Use {m.name} in chat"
-                >
-                  <div class="text-heading font-mono text-sm font-medium truncate">{m.name}</div>
-                </button>
+                <div class="text-heading font-mono text-sm font-medium truncate flex-1 min-w-0">
+                  {m.name}
+                </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                  {#if isLoaded(m.name)}
+                  {#if loadedNow}
+                    <!-- Status badge: non-interactive, just a state read-out -->
+                    <span
+                      class="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-success/20 text-success font-mono"
+                      title="This model is warmed into memory and ready to respond"
+                    >
+                      <span class="w-1.5 h-1.5 rounded-full bg-success" aria-hidden="true"></span>
+                      In memory
+                    </span>
+                    <!-- Separate action: evict from memory -->
                     <button
-                      onclick={() => unload(m.name)}
+                      onclick={(e) => unload(m.name, e)}
                       disabled={unloadingName === m.name}
-                      title="Unload {m.name} from memory (model stays installed)"
-                      aria-label="Unload {m.name} from memory"
-                      class="group/loaded text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-2 text-success font-mono hover:bg-error hover:text-canvas transition-colors disabled:opacity-60"
+                      title="Evict {m.name} from memory (stays installed on disk)"
+                      aria-label="Evict {m.name} from memory"
+                      class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded text-muted hover:text-error hover:bg-error/10 transition-colors font-mono disabled:opacity-60"
                     >
-                      {#if unloadingName === m.name}
-                        stopping…
-                      {:else}
-                        <span class="group-hover/loaded:hidden">loaded</span>
-                        <span class="hidden group-hover/loaded:inline">stop</span>
-                      {/if}
+                      {unloadingName === m.name ? 'Evicting…' : 'Evict'}
                     </button>
                   {/if}
-                  {#if confirmingDelete === m.name}
-                    <button
-                      onclick={() => confirmDelete(m.name)}
-                      class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-error text-canvas font-mono hover:opacity-90"
-                      aria-label="Confirm delete {m.name}"
+                  <button
+                    onclick={(e) => confirmDelete(m.name, m.size, e)}
+                    class="opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted hover:text-error transition-opacity p-1"
+                    aria-label="Delete {m.name}"
+                    title="Delete {m.name} ({fmtBytes(m.size)})"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
                     >
-                      confirm
-                    </button>
-                  {:else}
-                    <button
-                      onclick={() => confirmDelete(m.name)}
-                      class="opacity-0 group-hover:opacity-100 text-muted hover:text-error transition-opacity p-1"
-                      aria-label="Delete {m.name}"
-                      title="Delete {m.name}"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M3 6h18" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
-                  {/if}
+                      <path d="M3 6h18" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                  </button>
                 </div>
               </div>
-              <!-- "Best for" — the teaching line, not a label -->
+              <!-- "Best for" — the teaching line -->
               <p class="text-sm text-body leading-snug mb-3">
                 <span class="text-muted text-xs font-mono uppercase tracking-wider mr-1"
-                  >best for</span
+                  >Best for</span
                 >
                 {hints.bestFor}
               </p>
 
               <div class="grid grid-cols-3 gap-2 text-xs font-mono">
-                <div>
-                  <div class="text-muted text-[10px] uppercase">params</div>
+                <div title="Number of parameters — bigger usually means smarter and slower">
+                  <div class="text-muted text-[10px] uppercase">Size class</div>
                   <div class="text-body">{fmtParams(m.details?.parameter_size) || '—'}</div>
                 </div>
-                <div>
-                  <div class="text-muted text-[10px] uppercase">size</div>
+                <div title="How much disk this model takes">
+                  <div class="text-muted text-[10px] uppercase">On disk</div>
                   <div class="text-body">{fmtBytes(m.size)}</div>
                 </div>
-                <div>
-                  <div class="text-muted text-[10px] uppercase">quant</div>
+                <div title="Compression level — smaller = faster, less accurate">
+                  <div class="text-muted text-[10px] uppercase">Compression</div>
                   <div class="text-body">{m.details?.quantization_level || '—'}</div>
                 </div>
               </div>
 
               <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-border">
-                <div class="text-xs text-muted font-mono">
-                  {m.details?.family || '—'} · modified {ollamaTimeAgo(m.modified_at)}
+                <div class="text-xs text-muted font-mono truncate">
+                  {m.details?.family || '—'} · {ollamaTimeAgo(m.modified_at)}
                 </div>
                 {#if hints.tryPrompt}
                   <button
-                    onclick={() => tryPrompt(m.name, hints.tryPrompt)}
-                    class="text-xs text-accent hover:underline font-mono shrink-0"
-                    title={hints.tryPrompt}
-                    aria-label="Try this prompt with {m.name}"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      tryPrompt(m.name, hints.tryPrompt);
+                    }}
+                    class="text-xs font-medium text-accent hover:underline shrink-0"
+                    title={`Open chat with this prompt seeded:\n"${hints.tryPrompt}"`}
+                    aria-label="Try a starter prompt with {m.name}"
                   >
-                    try this prompt →
+                    Try a prompt →
                   </button>
                 {/if}
               </div>

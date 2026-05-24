@@ -9,7 +9,6 @@
   let host = $state(null);
   let err = $state(null);
   let loading = $state(true);
-  let confirmingDelete = $state('');
   /** @type {ReturnType<typeof setInterval> | undefined} */
   let pollHandle;
 
@@ -42,22 +41,17 @@
     return (part / total) * 100;
   }
 
-  async function confirmDeleteModel(name) {
-    if (confirmingDelete !== name) {
-      confirmingDelete = name;
-      setTimeout(() => {
-        if (confirmingDelete === name) confirmingDelete = '';
-      }, 5000);
-      return;
-    }
+  async function confirmDeleteModel(name, size) {
+    const ok = confirm(
+      `Delete ${name}?\n\nThis frees ${fmtBytes(size)} on disk. The model can be re-installed later from the catalog.`
+    );
+    if (!ok) return;
     try {
       await deleteModel(name);
       if (selectedModel.value === name) setModel('');
-      confirmingDelete = '';
       await refresh();
     } catch (e) {
       err = e.message;
-      confirmingDelete = '';
     }
   }
 </script>
@@ -132,9 +126,19 @@
       </div>
 
       {#if loading}
-        <div class="text-muted text-sm font-mono">loading…</div>
+        <div class="text-muted text-sm font-mono">Loading…</div>
       {:else if err}
-        <div class="text-error text-sm font-mono">error: {err}</div>
+        <Card>
+          <div class="text-center text-sm py-6 space-y-3">
+            <div class="text-error">Couldn't load storage info.</div>
+            <button
+              onclick={refresh}
+              class="bg-transparent border border-border text-body hover:border-accent rounded px-3 py-1.5 text-sm font-mono cursor-pointer"
+            >
+              Try again
+            </button>
+          </div>
+        </Card>
       {:else if models.length === 0}
         <Card>
           <div class="text-center text-muted text-sm py-6">
@@ -159,24 +163,14 @@
                     <span class="text-[10px] font-mono text-muted w-12 text-right">
                       {pct(m.size, totalOllamaBytes).toFixed(1)}%
                     </span>
-                    {#if confirmingDelete === m.name}
-                      <button
-                        onclick={() => confirmDeleteModel(m.name)}
-                        class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-error text-canvas font-mono hover:opacity-90"
-                        aria-label="Confirm delete {m.name}"
-                      >
-                        confirm
-                      </button>
-                    {:else}
-                      <button
-                        onclick={() => confirmDeleteModel(m.name)}
-                        class="opacity-0 group-hover:opacity-100 text-muted hover:text-error transition-opacity text-[10px] font-mono uppercase tracking-wider px-1"
-                        aria-label="Delete {m.name}"
-                        title="Delete {m.name}"
-                      >
-                        delete
-                      </button>
-                    {/if}
+                    <button
+                      onclick={() => confirmDeleteModel(m.name, m.size)}
+                      class="opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted hover:text-error transition-opacity text-[10px] font-mono uppercase tracking-wider px-1"
+                      aria-label="Delete {m.name}"
+                      title="Delete {m.name} ({fmtBytes(m.size)})"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
                 <div class="h-1.5 bg-surface-2 rounded overflow-hidden">
