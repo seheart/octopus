@@ -302,8 +302,11 @@
       </Section>
     </Card>
 
-    <div class="text-[11px] font-mono text-muted opacity-70 -mb-2">
-      Curated picks · last reviewed {CATALOG_REVIEWED}
+    <div class="border-t border-border pt-4 flex items-baseline justify-between">
+      <div class="text-sm text-heading font-medium">Suggestions</div>
+      <div class="text-[11px] font-mono text-muted opacity-70">
+        Hand-curated · last reviewed {CATALOG_REVIEWED}
+      </div>
     </div>
 
     {#each groups as group (group.heading)}
