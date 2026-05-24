@@ -581,11 +581,20 @@ async def _check_audit() -> dict[str, Any]:
         + _walk_files(BACKEND_DIR, (".py",))
         + _walk_files(REPO_ROOT, (".sh",))
     )
+    # Files that legitimately contain pattern-shaped strings:
+    # - test fixtures (`console.log`, stub credentials, etc.)
+    # - this file (the audit patterns + their remediation copy)
+    # - the matching pre-commit secret-scan script (mirrors the patterns)
+    audit_self = (BACKEND_DIR / "main.py").resolve()
+    scan_script = (REPO_ROOT / "scripts" / "secret-scan.sh").resolve()
     for path in targets:
-        # Test files intentionally contain `console.log`, stub credentials,
-        # and stub tokens for regression coverage. Skipping them avoids a
-        # forever-yellow audit, not a real blind spot.
         if ".test." in path.name or ".spec." in path.name or path.name == "test_main.py":
+            continue
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if resolved in (audit_self, scan_script):
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
