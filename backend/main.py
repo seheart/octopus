@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 
+
 def _resolve_ollama_url() -> str:
     if url := os.environ.get("OLLAMA_URL"):
         return url
