@@ -420,6 +420,158 @@ async def _check_audit() -> dict[str, Any]:
     return {"status": "warn", "detail": detail}
 
 
+_VERSION_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+def _parse_version(v: str) -> tuple[int, int, int] | None:
+    m = _VERSION_RE.search(v or "")
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
+async def _check_ollama_version_update() -> dict[str, Any]:
+    """Compare running Ollama against latest GitHub release. Warn → upgrade exists."""
+    try:
+        r = await client.get("/api/version", timeout=2.0)
+        if r.status_code != 200:
+            return {"status": "warn", "detail": f"local version HTTP {r.status_code}"}
+        local_raw = r.json().get("version", "")
+    except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        return {"status": "warn", "detail": f"could not read local version: {e}"}
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as gh:
+            gr = await gh.get("https://api.github.com/repos/ollama/ollama/releases/latest")
+    except httpx.RequestError as e:
+        return {"status": "warn", "detail": f"GitHub unreachable: {e}"}
+    if gr.status_code != 200:
+        return {"status": "warn", "detail": f"GitHub HTTP {gr.status_code}"}
+    latest_raw = gr.json().get("tag_name", "")
+    local, latest = _parse_version(local_raw), _parse_version(latest_raw)
+    if not local or not latest:
+        return {"status": "warn", "detail": f"unparseable versions: {local_raw!r} / {latest_raw!r}"}
+    if local >= latest:
+        return {"status": "pass", "detail": f"running {local_raw} (latest {latest_raw})"}
+    return {"status": "warn", "detail": f"running {local_raw}, latest is {latest_raw}"}
+
+
+async def _check_ollama_model_updates() -> dict[str, Any]:
+    """Compare each pulled model's digest against the Ollama library registry."""
+    try:
+        r = await client.get("/api/tags", timeout=5.0)
+        if r.status_code != 200:
+            return {"status": "warn", "detail": f"could not list models (HTTP {r.status_code})"}
+        models = r.json().get("models", []) or []
+    except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        return {"status": "warn", "detail": f"could not list models: {e}"}
+    if not models:
+        return {"status": "pass", "detail": "no models installed"}
+
+    stale: list[str] = []
+    checked = 0
+    skipped = 0
+    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as reg:
+        for m in models:
+            name = m.get("name") or m.get("model") or ""
+            local_digest = (m.get("digest") or "").lower().removeprefix("sha256:")
+            base, _, tag = name.partition(":")
+            tag = tag or "latest"
+            # Only library/* models can be checked against registry.ollama.ai; user
+            # namespaces (foo/bar) and external sources (hf.co/...) are skipped.
+            if not name or not local_digest or "/" in base:
+                skipped += 1
+                continue
+            try:
+                resp = await reg.head(
+                    f"https://registry.ollama.ai/v2/library/{base}/manifests/{tag}",
+                    headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
+                )
+            except httpx.RequestError:
+                skipped += 1
+                continue
+            if resp.status_code != 200:
+                skipped += 1
+                continue
+            remote = resp.headers.get("docker-content-digest", "").lower().removeprefix("sha256:")
+            checked += 1
+            if remote and remote != local_digest:
+                stale.append(name)
+    if not checked:
+        return {"status": "warn", "detail": f"no models checkable (skipped {skipped})"}
+    if stale:
+        return {"status": "warn", "detail": f"{len(stale)} stale: {', '.join(stale)}"}
+    return {"status": "pass", "detail": f"all {checked} models up to date"}
+
+
+def _format_outdated_detail(names: list[str]) -> str:
+    head = ", ".join(names[:10])
+    tail = f", … (+{len(names) - 10})" if len(names) > 10 else ""
+    return f"{len(names)} outdated: {head}{tail}"
+
+
+async def _check_npm_outdated() -> dict[str, Any]:
+    """`npm outdated --json` in frontend/. Empty → pass; populated → warn."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "npm",
+            "outdated",
+            "--json",
+            cwd=str(FRONTEND_DIR),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        return {"status": "warn", "detail": "npm not installed"}
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60.0)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return {"status": "warn", "detail": "npm outdated timed out"}
+    text = stdout.decode("utf-8", errors="replace").strip() or "{}"
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return {"status": "warn", "detail": "could not parse npm output"}
+    if not data:
+        return {"status": "pass", "detail": "all npm packages up to date"}
+    return {"status": "warn", "detail": _format_outdated_detail(sorted(data.keys()))}
+
+
+async def _check_pip_outdated() -> dict[str, Any]:
+    """`pip list --outdated --format=json` in backend venv. Empty → pass; populated → warn."""
+    pip = BACKEND_DIR / ".venv" / "bin" / "pip"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            str(pip),
+            "list",
+            "--outdated",
+            "--format=json",
+            cwd=str(BACKEND_DIR),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        return {"status": "warn", "detail": "pip not found in backend venv"}
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60.0)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return {"status": "warn", "detail": "pip outdated timed out"}
+    text = stdout.decode("utf-8", errors="replace").strip() or "[]"
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return {"status": "warn", "detail": "could not parse pip output"}
+    if not data:
+        return {"status": "pass", "detail": "all pip packages up to date"}
+    return {
+        "status": "warn",
+        "detail": _format_outdated_detail(sorted(p.get("name", "?") for p in data)),
+    }
+
+
 CheckFn = Callable[[], Awaitable[dict[str, Any]]]
 # (id, label, category, fn). Category groups the UI; order is run order.
 _DIAGNOSTIC_CHECKS: list[tuple[str, str, str, CheckFn]] = [
@@ -468,6 +620,10 @@ _DIAGNOSTIC_CHECKS: list[tuple[str, str, str, CheckFn]] = [
         lambda: _run_shell(["npm", "run", "test"], FRONTEND_DIR),
     ),
     ("audit", "audit · secrets / debug leftovers", "audit", _check_audit),
+    ("ollama_version_update", "Ollama version up to date", "updates", _check_ollama_version_update),
+    ("ollama_model_updates", "Ollama models up to date", "updates", _check_ollama_model_updates),
+    ("npm_outdated", "npm packages up to date", "updates", _check_npm_outdated),
+    ("pip_outdated", "pip packages up to date", "updates", _check_pip_outdated),
 ]
 
 

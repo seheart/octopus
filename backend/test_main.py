@@ -1,3 +1,4 @@
+import asyncio
 import json
 import subprocess
 from typing import Any
@@ -418,7 +419,6 @@ def test_check_disk_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_check_ollama_pass_and_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     """_check_ollama handles 200, non-200, and connection error."""
-    import asyncio
 
     import httpx as _httpx
 
@@ -451,7 +451,6 @@ def test_check_ollama_pass_and_fail(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_check_audit_scans_frontend(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     """_check_audit walks frontend/src and reports forbidden patterns."""
-    import asyncio
 
     src = tmp_path / "src"
     src.mkdir()
@@ -469,7 +468,6 @@ def test_check_audit_scans_frontend(monkeypatch: pytest.MonkeyPatch, tmp_path: A
 
 
 def test_check_audit_clean_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
-    import asyncio
 
     src = tmp_path / "src"
     src.mkdir()
@@ -481,9 +479,143 @@ def test_check_audit_clean_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) 
     assert "scanned" in res["detail"]
 
 
+def test_parse_version_extracts_triple() -> None:
+    assert main._parse_version("0.17.4") == (0, 17, 4)
+    assert main._parse_version("v1.2.3") == (1, 2, 3)
+    assert main._parse_version("garbage") is None
+    assert main._parse_version("") is None
+
+
+def test_check_ollama_version_update_pass_warn_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pass when local >= latest, warn when local < latest, warn on network error."""
+
+    local_resp = MagicMock()
+    local_resp.status_code = 200
+    local_resp.json.return_value = {"version": "0.17.4"}
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(return_value=local_resp)))
+
+    def make_gh_client(tag: str) -> Any:
+        gh_resp = MagicMock()
+        gh_resp.status_code = 200
+        gh_resp.json.return_value = {"tag_name": tag}
+        instance = MagicMock()
+        instance.get = AsyncMock(return_value=gh_resp)
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=None)
+        return MagicMock(return_value=instance)
+
+    # pass — local == latest
+    monkeypatch.setattr(httpx, "AsyncClient", make_gh_client("v0.17.4"))
+    res = asyncio.run(main._check_ollama_version_update())
+    assert res["status"] == "pass"
+    assert "0.17.4" in res["detail"]
+
+    # warn — local < latest
+    monkeypatch.setattr(httpx, "AsyncClient", make_gh_client("v0.18.0"))
+    res = asyncio.run(main._check_ollama_version_update())
+    assert res["status"] == "warn"
+    assert "0.18.0" in res["detail"]
+
+    # warn — github unreachable
+    def boom_client(*_a: Any, **_kw: Any) -> Any:
+        instance = MagicMock()
+        instance.get = AsyncMock(side_effect=httpx.ConnectError("down"))
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=None)
+        return instance
+
+    monkeypatch.setattr(httpx, "AsyncClient", boom_client)
+    res = asyncio.run(main._check_ollama_version_update())
+    assert res["status"] == "warn"
+    assert "unreachable" in res["detail"]
+
+
+def test_check_ollama_model_updates_detects_stale_and_skips_user_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mismatched digest → stale; namespaced models (foo/bar) → skipped."""
+
+    tags_resp = MagicMock()
+    tags_resp.status_code = 200
+    tags_resp.json.return_value = {
+        "models": [
+            {"name": "gemma3:12b", "digest": "aaa"},  # stale (registry returns bbb)
+            {"name": "nomic-embed-text:latest", "digest": "ccc"},  # fresh
+            {"name": "user/custom:1", "digest": "ddd"},  # skipped
+        ]
+    }
+    monkeypatch.setattr(main, "client", MagicMock(get=AsyncMock(return_value=tags_resp)))
+
+    def reg_head(url: str, headers: Any = None) -> Any:
+        resp = MagicMock()
+        resp.status_code = 200
+        if "gemma3" in url:
+            resp.headers = {"docker-content-digest": "sha256:bbb"}
+        else:
+            resp.headers = {"docker-content-digest": "sha256:ccc"}
+        return resp
+
+    instance = MagicMock()
+    instance.head = AsyncMock(side_effect=reg_head)
+    instance.__aenter__ = AsyncMock(return_value=instance)
+    instance.__aexit__ = AsyncMock(return_value=None)
+    monkeypatch.setattr(httpx, "AsyncClient", MagicMock(return_value=instance))
+
+    res = asyncio.run(main._check_ollama_model_updates())
+    assert res["status"] == "warn"
+    assert "gemma3:12b" in res["detail"]
+    assert "nomic-embed-text" not in res["detail"]
+
+
+def _fake_proc(stdout_bytes: bytes) -> Any:
+    """Build a fake asyncio subprocess that returns the given stdout."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(return_value=(stdout_bytes, b""))
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock(return_value=None)
+    return proc
+
+
+def test_check_npm_outdated_parses_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty {} → pass, populated → warn with package names."""
+
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", AsyncMock(return_value=_fake_proc(b"{}"))
+    )
+    assert asyncio.run(main._check_npm_outdated())["status"] == "pass"
+
+    payload = json.dumps({"vite": {}, "eslint": {}}).encode()
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", AsyncMock(return_value=_fake_proc(payload))
+    )
+    res = asyncio.run(main._check_npm_outdated())
+    assert res["status"] == "warn"
+    assert "vite" in res["detail"]
+    assert "eslint" in res["detail"]
+
+
+def test_check_pip_outdated_parses_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty [] → pass, populated → warn with package names."""
+
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", AsyncMock(return_value=_fake_proc(b"[]"))
+    )
+    assert asyncio.run(main._check_pip_outdated())["status"] == "pass"
+
+    payload = json.dumps([{"name": "ruff"}, {"name": "mypy"}]).encode()
+    monkeypatch.setattr(
+        asyncio, "create_subprocess_exec", AsyncMock(return_value=_fake_proc(payload))
+    )
+    res = asyncio.run(main._check_pip_outdated())
+    assert res["status"] == "warn"
+    assert "ruff" in res["detail"]
+    assert "mypy" in res["detail"]
+
+
 def test_run_shell_pass_and_fail(tmp_path: Any) -> None:
     """_run_shell wraps subprocess; verify pass, fail, and missing-binary paths."""
-    import asyncio
 
     # pass — `true` exits 0
     res = asyncio.run(main._run_shell(["true"], tmp_path))
