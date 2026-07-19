@@ -4,15 +4,12 @@
   import { route, go } from '../stores/route.svelte.js';
   import { getLoaded, getGpu } from '../api.js';
 
-  // Primary nav lives at the top now (was split across header/footer, which
-  // forced users to scan both surfaces to find any given page).
+  // Primary nav: the everyday pages. Health/maintenance pages (Storage,
+  // System, Diagnostic) live bottom-right in the Footer to keep this row short.
   const primaryTabs = [
     { id: 'chat', label: 'Chat' },
     { id: 'models', label: 'Models' },
-    { id: 'pull', label: 'Install' },
-    { id: 'storage', label: 'Storage' },
-    { id: 'system', label: 'System' },
-    { id: 'diagnostic', label: 'Diagnostic' }
+    { id: 'pull', label: 'Install' }
   ];
 
   function navClass(id) {

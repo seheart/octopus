@@ -2,7 +2,6 @@
   import { theme, setThemeMode } from '../stores/theme.svelte.js';
   import { selectedModel, setModel } from '../stores/model.svelte.js';
   import { Card, Section } from '../components/ui/index.js';
-  import { go } from '../stores/route.svelte.js';
   import { onMount } from 'svelte';
   import { getModels } from '../api.js';
 
@@ -28,15 +27,6 @@
     { keys: 'Enter', desc: 'Send message' },
     { keys: 'Shift+Enter', desc: 'New line in the message' },
     { keys: 'Esc (in palette)', desc: 'Close the command palette' }
-  ];
-
-  // Dev/internal pages — kept out of the primary nav since they're not
-  // load-bearing for a first-time user.
-  const morePages = [
-    { id: 'about', label: 'About', desc: 'What this is and why it exists' },
-    { id: 'roadmap', label: 'Roadmap', desc: 'What is shipped and what is next' },
-    { id: 'design', label: 'Design system', desc: 'Tokens, primitives, component examples' },
-    { id: 'labs', label: 'Labs', desc: 'Logo color experiments (dev sandbox)' }
   ];
 </script>
 
@@ -116,23 +106,6 @@
           Octopus saves your theme and default model in this browser. No accounts, no servers, no
           tracking. Clear site data to reset.
         </p>
-      </Section>
-    </Card>
-
-    <!-- More pages -->
-    <Card padding="lg">
-      <Section title="More">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {#each morePages as p (p.id)}
-            <button
-              onclick={() => go(p.id)}
-              class="text-left p-3 rounded border border-border bg-surface hover:border-accent hover:bg-surface-2 transition-colors"
-            >
-              <div class="font-mono text-sm text-heading">{p.label} →</div>
-              <div class="text-xs text-muted mt-0.5">{p.desc}</div>
-            </button>
-          {/each}
-        </div>
       </Section>
     </Card>
   </div>

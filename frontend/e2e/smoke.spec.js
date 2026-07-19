@@ -106,34 +106,34 @@ test('header has Chat and Models tabs and a Settings link', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Settings' })).toBeVisible();
 });
 
-test('footer nav routes to System, Storage, Diagnostic', async ({ page }) => {
+test('footer nav routes to Storage, System, Diagnostic', async ({ page }) => {
   await page.goto('/');
   const footerNav = page.getByRole('navigation', { name: 'Footer navigation' });
 
-  await footerNav.getByRole('button', { name: 'system', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'System', exact: true })).toBeVisible();
-
-  await footerNav.getByRole('button', { name: 'storage', exact: true }).click();
+  await footerNav.getByRole('button', { name: 'Storage', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Storage', exact: true })).toBeVisible();
 
-  await footerNav.getByRole('button', { name: 'diagnostic', exact: true }).click();
+  await footerNav.getByRole('button', { name: 'System', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'System', exact: true })).toBeVisible();
+
+  await footerNav.getByRole('button', { name: 'Diagnostic', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Diagnostic', exact: true })).toBeVisible();
 });
 
-test('settings page surfaces Design, Roadmap, About as more pages', async ({ page }) => {
+test('footer nav routes to Design, Labs, Roadmap, About', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  const footerNav = page.getByRole('navigation', { name: 'Footer navigation' });
 
-  await page.getByRole('button', { name: /Design system →/ }).click();
+  await footerNav.getByRole('button', { name: 'Design', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Design System' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: /Roadmap →/ }).click();
+  await footerNav.getByRole('button', { name: 'Labs', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Labs', exact: true })).toBeVisible();
+
+  await footerNav.getByRole('button', { name: 'Roadmap', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Roadmap', exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: /About →/ }).click();
+  await footerNav.getByRole('button', { name: 'About', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
 });
 

@@ -5,9 +5,20 @@
   import { onMount, onDestroy } from 'svelte';
   import { getModels, getOllamaInfo } from '../api.js';
 
-  // Footer is status-only now (nav moved to Header). Carries: connection
-  // health, installed-on-disk count, ollama version, and the utility cluster
-  // (github / theme / settings). One scannable line.
+  // Footer carries: connection health, installed-on-disk count, ollama
+  // version, then bottom-right the secondary nav followed by the utility
+  // cluster (github / theme / settings). One scannable line.
+  // Nav order: health/maintenance first (Storage / System / Diagnostic),
+  // then dev sandboxes (Design / Labs), then project meta (Roadmap / About).
+  const secondaryTabs = [
+    { id: 'storage', label: 'Storage' },
+    { id: 'system', label: 'System' },
+    { id: 'diagnostic', label: 'Diagnostic' },
+    { id: 'design', label: 'Design' },
+    { id: 'labs', label: 'Labs' },
+    { id: 'roadmap', label: 'Roadmap' },
+    { id: 'about', label: 'About' }
+  ];
   let modelCount = $state(0);
   let ollamaVersion = $state(null);
   /** @type {ReturnType<typeof setInterval> | undefined} */
@@ -69,8 +80,23 @@
       </span>
     </div>
 
-    <!-- Right: utility cluster (github, theme, settings) -->
+    <!-- Right: secondary nav, then the utility cluster
+         (github, theme, settings) -->
     <div class="flex items-center gap-1">
+      <nav class="flex items-center gap-3 mr-2" aria-label="Footer navigation">
+        {#each secondaryTabs as tab (tab.id)}
+          <button
+            onclick={() => go(tab.id)}
+            aria-current={route.page === tab.id ? 'page' : undefined}
+            class="bg-transparent border-0 p-0 cursor-pointer transition-colors whitespace-nowrap {route.page ===
+            tab.id
+              ? 'text-accent underline underline-offset-4 decoration-1'
+              : 'text-muted hover:text-accent'}"
+          >
+            {tab.label}
+          </button>
+        {/each}
+      </nav>
       <a
         href="https://github.com/seheart/octopus"
         target="_blank"
