@@ -7,7 +7,6 @@ const PAGES = [
   'roadmap',
   'system',
   'design',
-  'labs',
   'about',
   'settings'
 ];

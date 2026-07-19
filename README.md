@@ -21,7 +21,7 @@ Chat page layout:
 
 - **Backend**: FastAPI on `:8800`, streams Ollama (`127.0.0.1:11434`)
 - **Frontend**: Svelte 5 + Vite + Tailwind 4 on `:8801`
-- **Pages**: Chat, Models (+ Pull, Storage), System, Diagnostic, Labs, Design, Roadmap, About, Settings
+- **Pages**: Chat, Models (+ Pull, Storage), System, Diagnostic, Design, Roadmap, About, Settings
 - **Theme**: light (cream/ink-black) and dark (black/phosphor-green), persisted to localStorage
 
 ## Run

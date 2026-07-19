@@ -120,15 +120,12 @@ test('footer nav routes to Storage, System, Diagnostic', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Diagnostic', exact: true })).toBeVisible();
 });
 
-test('footer nav routes to Design, Labs, Roadmap, About', async ({ page }) => {
+test('footer nav routes to Design, Roadmap, About', async ({ page }) => {
   await page.goto('/');
   const footerNav = page.getByRole('navigation', { name: 'Footer navigation' });
 
   await footerNav.getByRole('button', { name: 'Design', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Design System' })).toBeVisible();
-
-  await footerNav.getByRole('button', { name: 'Labs', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Labs', exact: true })).toBeVisible();
 
   await footerNav.getByRole('button', { name: 'Roadmap', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Roadmap', exact: true })).toBeVisible();

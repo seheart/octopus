@@ -9,13 +9,12 @@
   // version, then bottom-right the secondary nav followed by the utility
   // cluster (github / theme / settings). One scannable line.
   // Nav order: health/maintenance first (Storage / System / Diagnostic),
-  // then dev sandboxes (Design / Labs), then project meta (Roadmap / About).
+  // then the design sandbox, then project meta (Roadmap / About).
   const secondaryTabs = [
     { id: 'storage', label: 'Storage' },
     { id: 'system', label: 'System' },
     { id: 'diagnostic', label: 'Diagnostic' },
     { id: 'design', label: 'Design' },
-    { id: 'labs', label: 'Labs' },
     { id: 'roadmap', label: 'Roadmap' },
     { id: 'about', label: 'About' }
   ];

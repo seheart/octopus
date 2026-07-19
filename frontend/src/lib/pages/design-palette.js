@@ -1,6 +1,6 @@
 // The shipped palette, in source-of-truth form. Hex literals live in a .js
-// file (not LabsPage.svelte / DesignPage.svelte) so the design-system
-// pattern check stays strict for component code.
+// file (not DesignPage.svelte) so the design-system pattern check stays
+// strict for component code.
 
 export const DARK_BG = '#0a0a0a';
 export const LIGHT_BG = '#f6f4ef';
