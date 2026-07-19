@@ -119,7 +119,7 @@
     }, 2500);
 
     const conv = messages
-      .filter((m) => m.role !== 'assistant' || m.content)
+      .filter((m) => m.role !== 'assistant' || (m.content && !m.error))
       .map((m) => ({ role: m.role, content: m.content }));
 
     try {
@@ -149,6 +149,10 @@
           liveStat = last.stats;
         } else if (evt.type === 'error') {
           last.content = (last.content || '') + `\n\n_Error: ${evt.message}_`;
+          // Mark it so the next send() drops this message from the outbound
+          // conversation — the model must not be fed error text as if it
+          // had said it.
+          last.error = true;
           replaceLast(last);
           warmupActive = false;
         }
@@ -158,6 +162,7 @@
       if (err.name !== 'AbortError') {
         const last = messages[messages.length - 1];
         last.content = (last.content || '') + `\n\n_Error: ${err.message}_`;
+        last.error = true;
         replaceLast(last);
       }
     } finally {

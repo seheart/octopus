@@ -26,9 +26,12 @@ describe('modelHints', () => {
     expect(modelHints(model('qwq:32b', 'qwen2', '32B')).bestFor).toMatch(/reason/i);
   });
 
-  it('recognizes vision models (gemma3 family + llava)', () => {
-    expect(modelHints(model('gemma3:12b', 'gemma3', '12.2B')).bestFor).toMatch(/image/i);
-    expect(modelHints(model('llava:13b', 'llama', '13B')).bestFor).toMatch(/image/i);
+  it('is honest about vision models — no image-paste instructions in a text-only app', () => {
+    const g = modelHints(model('gemma3:12b', 'gemma3', '12.2B'));
+    expect(g.bestFor).toMatch(/text-only/i);
+    expect(g.tryPrompt).not.toMatch(/paste|screenshot|photo/i);
+    const l = modelHints(model('llava:13b', 'llama', '13B'));
+    expect(l.bestFor).toMatch(/text-only/i);
   });
 
   it('flags small models as fast', () => {

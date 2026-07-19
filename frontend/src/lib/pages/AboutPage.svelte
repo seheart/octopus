@@ -27,7 +27,7 @@
     infra: [
       ['npm run validate', 'full local gate: lint, types, tests, coverage'],
       ['Husky', 'pre-commit hook'],
-      ['Dependabot', 'automated dependency PRs'],
+      ['Diagnostic page', 'update + audit checks from inside the app'],
       ['validate-patterns.sh', 'design-system enforcement']
     ]
   };

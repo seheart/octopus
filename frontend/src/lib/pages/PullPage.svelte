@@ -1,23 +1,15 @@
 <script>
   import { onMount } from 'svelte';
-  import { getModels, pullModel, fmtBytes } from '../api.js';
-  import { setModel, selectedModel } from '../stores/model.svelte.js';
+  import { getModels, fmtBytes } from '../api.js';
+  import { pull, startPull as storeStartPull, cancelPull } from '../stores/pull.svelte.js';
   import { Button, Card, Section } from '../components/ui/index.js';
 
   let installed = $state([]);
 
-  let pullName = $state('');
-  let pulling = $state(false);
-  let pullStatus = $state('');
-  let pullPct = $state(null);
-  let pullTotal = $state(null);
-  let pullCompleted = $state(null);
-  let pullError = $state(null);
-  let currentPull = $state(null);
-
-  // Track bytes/sec with a small rolling sample so the ETA isn't jittery.
-  let lastSample = $state({ at: 0, bytes: 0 });
-  let bytesPerSec = $state(0);
+  // Input only — everything about the pull itself lives in the pull store
+  // so a download survives navigating away from this page. Pre-fill with the
+  // in-flight (or last) pull so a remount shows what's happening.
+  let pullName = $state(pull.name);
 
   // Hand-curated catalog. Ollama itself has no stable public catalog API;
   // updating this list is a periodic human task. The "last reviewed" date
@@ -120,6 +112,13 @@
 
   onMount(refresh);
 
+  // Re-fetch the installed list whenever a pull (even one started before
+  // this mount) completes.
+  $effect(() => {
+    void pull.installedVersion;
+    refresh();
+  });
+
   function isInstalled(name) {
     return installed.some((m) => m.name === name || m.name.startsWith(name + ':'));
   }
@@ -145,56 +144,11 @@
     return s ? `${m}m ${s}s left` : `${m}m left`;
   }
 
-  async function startPull(name = pullName) {
+  function startPull(name = pullName) {
     const target = name.trim();
-    if (!target || pulling) return;
-    pulling = true;
-    pullStatus = 'starting…';
-    pullPct = null;
-    pullTotal = null;
-    pullCompleted = null;
-    pullError = null;
+    if (!target || pull.active) return;
     pullName = target;
-    bytesPerSec = 0;
-    lastSample = { at: Date.now(), bytes: 0 };
-
-    try {
-      currentPull = pullModel(target, (evt) => {
-        if (evt.status === 'error') {
-          pullError = evt.error || 'install failed';
-          return;
-        }
-        pullStatus = evt.status;
-        if (typeof evt.total === 'number') pullTotal = evt.total;
-        if (typeof evt.completed === 'number') {
-          pullCompleted = evt.completed;
-          if (pullTotal) pullPct = Math.min(100, (pullCompleted / pullTotal) * 100);
-          // Bytes/sec EMA over a ~3s window for ETA smoothing.
-          const now = Date.now();
-          const dtMs = now - lastSample.at;
-          if (dtMs > 300) {
-            const inst = ((pullCompleted - lastSample.bytes) / dtMs) * 1000;
-            bytesPerSec = bytesPerSec ? bytesPerSec * 0.7 + inst * 0.3 : inst;
-            lastSample = { at: now, bytes: pullCompleted };
-          }
-        }
-      });
-      await currentPull.done;
-      if (!pullError) {
-        pullStatus = 'success';
-        await refresh();
-        if (!selectedModel.value) setModel(target);
-      }
-    } catch (e) {
-      if (e.name !== 'AbortError') pullError = e.message;
-    } finally {
-      pulling = false;
-      currentPull = null;
-    }
-  }
-
-  function cancelPull() {
-    currentPull?.abort();
+    storeStartPull(target);
   }
 
   function onPullKey(e) {
@@ -205,12 +159,12 @@
   }
 
   const etaSeconds = $derived(
-    pulling && bytesPerSec > 0 && pullTotal && pullCompleted !== null
-      ? (pullTotal - pullCompleted) / bytesPerSec
+    pull.active && pull.bytesPerSec > 0 && pull.total && pull.completed !== null
+      ? (pull.total - pull.completed) / pull.bytesPerSec
       : 0
   );
-  const friendly = $derived(friendlyStatus(pullStatus));
-  const isDone = $derived(pullStatus === 'success' || pullStatus === 'done');
+  const friendly = $derived(friendlyStatus(pull.status));
+  const isDone = $derived(pull.status === 'success' || pull.status === 'done');
 </script>
 
 <div class="h-full overflow-y-auto px-6 py-6">
@@ -236,11 +190,11 @@
             bind:value={pullName}
             onkeydown={onPullKey}
             placeholder="e.g. qwen3:8b, llama3.2:3b"
-            disabled={pulling}
+            disabled={pull.active}
             class="flex-1 bg-surface-2 border border-border rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-accent text-body disabled:opacity-50"
             aria-label="Model name to install"
           />
-          {#if pulling}
+          {#if pull.active}
             <Button variant="secondary" onclick={cancelPull}>Cancel</Button>
           {:else}
             <Button variant="primary" onclick={() => startPull()} disabled={!pullName.trim()}>
@@ -249,13 +203,13 @@
           {/if}
         </div>
 
-        {#if pulling || pullError || isDone}
+        {#if pull.active || pull.error || isDone}
           <div class="bg-surface-2 border border-border rounded p-3 font-mono text-xs space-y-1.5">
             <div class="flex justify-between gap-3">
-              <span class="text-body truncate">{pullName || '—'}</span>
+              <span class="text-body truncate">{pull.name || '—'}</span>
               <span class="text-muted shrink-0">
-                {#if pullError}
-                  <span class="text-error">{pullError}</span>
+                {#if pull.error}
+                  <span class="text-error">{pull.error}</span>
                 {:else if isDone}
                   <span class="text-success">✓ Installed</span>
                 {:else}
@@ -263,20 +217,20 @@
                 {/if}
               </span>
             </div>
-            {#if pullPct !== null && !pullError && !isDone}
+            {#if pull.pct !== null && !pull.error && !isDone}
               <div class="h-1.5 bg-canvas rounded overflow-hidden">
-                <div class="h-full bg-accent transition-all" style="width: {pullPct}%"></div>
+                <div class="h-full bg-accent transition-all" style="width: {pull.pct}%"></div>
               </div>
               <div class="flex justify-between text-muted">
                 <span>
-                  {pullPct.toFixed(0)}%
-                  {#if pullCompleted !== null && pullTotal}
-                    · {fmtBytes(pullCompleted)} / {fmtBytes(pullTotal)}
+                  {pull.pct.toFixed(0)}%
+                  {#if pull.completed !== null && pull.total}
+                    · {fmtBytes(pull.completed)} / {fmtBytes(pull.total)}
                   {/if}
                 </span>
                 <span>
-                  {#if bytesPerSec > 0}
-                    {fmtBytes(bytesPerSec)}/s
+                  {#if pull.bytesPerSec > 0}
+                    {fmtBytes(pull.bytesPerSec)}/s
                   {/if}
                   {#if etaSeconds > 0}
                     · {fmtEta(etaSeconds)}
@@ -337,7 +291,7 @@
                 {:else}
                   <button
                     onclick={() => startPull(item.name)}
-                    disabled={pulling}
+                    disabled={pull.active}
                     class="text-xs font-medium text-accent hover:underline disabled:opacity-40 disabled:no-underline bg-transparent border-0 p-0 cursor-pointer"
                   >
                     Install →

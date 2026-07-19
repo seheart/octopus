@@ -851,8 +851,7 @@ _DEFAULT_REMEDIATIONS: dict[str, str] = {
     ),
     "npm_outdated": (
         "Bump everything to latest:\n"
-        "  cd frontend && npm install --save-dev <pkg>@latest [<pkg>@latest ...]\n"
-        "Or review/merge open Dependabot PRs."
+        "  cd frontend && npm install --save-dev <pkg>@latest [<pkg>@latest ...]"
     ),
 }
 

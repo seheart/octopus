@@ -57,11 +57,15 @@ export function modelHints(model) {
     };
   }
 
-  // Vision / multimodal
+  // Vision / multimodal — these models CAN read images, but Octopus's chat
+  // is text-only today (plain textarea, text-only ChatMessage schema). The
+  // hint must teach what works here and now, not send users hunting for an
+  // upload button that doesn't exist.
   if (family === 'gemma3' || name.includes('llava') || name.includes('vision')) {
     return {
-      bestFor: 'looking at images you paste in and answering questions about them',
-      tryPrompt: 'Paste a screenshot or photo and ask what is happening in it.',
+      bestFor:
+        'general chat with strong instruction following (it also understands images, but Octopus chat is text-only for now)',
+      tryPrompt: 'Rewrite this to be friendlier: "Your request has been denied."',
       chatCapable: true
     };
   }
