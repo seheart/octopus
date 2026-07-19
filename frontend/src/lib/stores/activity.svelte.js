@@ -69,6 +69,9 @@ export function tokensPerSec(modelName) {
 
 // --- System-wide activity poller --------------------------------------------
 // Watches /api/loaded for every client's activity, not just Octopus's chat.
+// Reference-counted: the 250ms tick only runs while at least one consumer
+// (an Oscilloscope) is on screen — otherwise every open tab hammers the
+// backend 4×/second forever for data nothing is rendering.
 
 const POLL_MS = 250;
 /** @type {SvelteMap<string, number>} model -> last-seen expires_at (epoch ms) */
@@ -103,9 +106,30 @@ async function pollOnce() {
   }
 }
 
-/** Start the global activity poller (idempotent). */
-export function startActivityPoller() {
-  if (pollHandle) return;
-  pollOnce();
-  pollHandle = setInterval(pollOnce, POLL_MS);
+let refCount = 0;
+
+/**
+ * Acquire the activity poller. Starts it on the first acquisition; returns a
+ * release function that stops it when the last consumer lets go. Call from a
+ * component's onMount and invoke the release in its cleanup.
+ */
+export function acquireActivityPoller() {
+  refCount++;
+  if (!pollHandle) {
+    pollOnce();
+    pollHandle = setInterval(pollOnce, POLL_MS);
+  }
+  let released = false;
+  return () => {
+    if (released) return; // double-release must not steal another consumer's ref
+    released = true;
+    refCount = Math.max(0, refCount - 1);
+    if (refCount === 0 && pollHandle) {
+      clearInterval(pollHandle);
+      pollHandle = undefined;
+      // Drop expiry baselines — after a gap they'd be stale and the first
+      // poll after re-acquire would mis-fire pulses for every loaded model.
+      lastExpires.clear();
+    }
+  };
 }

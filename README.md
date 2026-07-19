@@ -21,7 +21,7 @@ Chat page layout:
 
 - **Backend**: FastAPI on `:8800`, streams Ollama (`127.0.0.1:11434`)
 - **Frontend**: Svelte 5 + Vite + Tailwind 4 on `:8801`
-- **Pages**: Chat, Models, System, Design, Settings
+- **Pages**: Chat, Models (+ Pull, Storage), System, Diagnostic, Labs, Design, Roadmap, About, Settings
 - **Theme**: light (cream/ink-black) and dark (black/phosphor-green), persisted to localStorage
 
 ## Run
@@ -73,7 +73,7 @@ Per-stack:
 | Backend types | `cd backend && ./.venv/bin/mypy .` |
 | Backend tests + coverage | `cd backend && ./.venv/bin/pytest --cov=. --cov-report=term-missing` |
 
-Coverage gate: backend must stay above **70%** (currently 95%).
+Coverage gate: backend must stay above **70%** (currently 87%).
 
 ## Governance — no wack-a-mole coding
 
@@ -81,8 +81,8 @@ Rules enforced by tooling, not memory:
 
 1. **Single source of truth for colors.** Hex values are declared only in `frontend/src/app.css`. Components use semantic Tailwind utilities (`bg-surface`, `text-heading`) or `var(--accent)`. Banned: `bg-[#xxx]`, inline hex in `style=` attrs.
 2. **Sanctioned UI primitives.** New buttons/cards/badges use `frontend/src/lib/components/ui/`. If you need something the primitives don't provide, add it there first.
-3. **Pre-commit hook** runs ESLint, Prettier, Stylelint, ruff, and `validate-patterns.sh` on every commit.
-4. **CI** (`.github/workflows/ci.yml`) re-runs everything on every push/PR. Coverage must not drop below the gate.
+3. **Pre-commit hook** runs `validate-patterns.sh` and `secret-scan.sh` on every commit (fast checks only).
+4. **`npm run validate`** re-runs everything — lint, types, tests, format, patterns — and is the gate before pushing. (CI was removed in the solo-dev cleanup; validation runs locally.) Coverage must not drop below the gate.
 5. **The `Design` tab in the running app** is a living style guide showing every token and primitive in both themes.
 
 If you find yourself writing CSS or markup that doesn't fit the primitives, **stop and add a primitive** — don't paste-shape the existing one.
@@ -112,13 +112,14 @@ octopus/
 │       │   │   ├── Header.svelte
 │       │   │   ├── Footer.svelte
 │       │   │   ├── OctoLogo.svelte
+│       │   │   ├── Oscilloscope.svelte
+│       │   │   ├── CommandPalette.svelte
 │       │   │   └── ui/        # design primitives
-│       │   ├── pages/         # Chat, Models, System, Design, Settings
-│       │   └── stores/        # theme, route
+│       │   ├── pages/         # Chat, Models, Pull, Storage, System, Diagnostic, …
+│       │   └── stores/        # theme, route, model, activity, connection
 │       └── main.js
 ├── scripts/
-│   └── validate-patterns.sh   # pattern enforcement (called by hook + CI)
-├── .github/workflows/ci.yml
+│   └── validate-patterns.sh   # pattern enforcement (called by pre-commit hook)
 ├── .husky/pre-commit
 ├── package.json               # husky + lint-staged orchestration
 └── start.sh                   # boots both servers

@@ -2,7 +2,7 @@
   import { onMount, onDestroy, untrack } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { colorFor } from './oscilloscope-palette.js';
-  import { tokensPerSec } from '../stores/activity.svelte.js';
+  import { acquireActivityPoller, tokensPerSec } from '../stores/activity.svelte.js';
 
   /**
    * @type {{ models: Array<{name:string}>, fullScale?: number }}
@@ -144,11 +144,19 @@
     raf = requestAnimationFrame(frame);
   }
 
+  /** @type {(() => void) | undefined} */
+  let releasePoller;
+
   onMount(() => {
+    // The scope is what renders external-client activity, so it owns the
+    // poller subscription — the 250ms /api/loaded tick runs only while a
+    // scope is on screen.
+    releasePoller = acquireActivityPoller();
     raf = requestAnimationFrame(frame);
   });
   onDestroy(() => {
     if (raf !== undefined) cancelAnimationFrame(raf);
+    releasePoller?.();
   });
 </script>
 

@@ -16,14 +16,13 @@
   import SettingsPage from './lib/pages/SettingsPage.svelte';
   import { route, go } from './lib/stores/route.svelte.js';
   import { initTheme } from './lib/stores/theme.svelte.js';
-  import { startActivityPoller } from './lib/stores/activity.svelte.js';
   import CommandPalette from './lib/components/CommandPalette.svelte';
 
   onMount(() => {
     initTheme();
-    // Watches Ollama globally so the Oscilloscope shows activity from
-    // every client (Octopus, raven, ollama CLI, …) — not just our chats.
-    startActivityPoller();
+    // The Ollama activity poller is acquired by the Oscilloscope itself
+    // (see stores/activity.svelte.js) — it only runs while a scope is
+    // actually on screen, instead of ticking 4×/second app-wide forever.
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);
   });

@@ -836,6 +836,78 @@ def test_resolve_ollama_url_loopback_variants_accepted(monkeypatch: pytest.Monke
         assert main._resolve_ollama_url() == url
 
 
+def test_chat_forwards_ollama_error_chunk(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """Ollama reports failures as `{"error": ...}` NDJSON (e.g. model not
+    found, OOM) — no `message`, no `done`. The stream must surface a
+    structured error event, not end silently with an empty reply."""
+    chunks = [json.dumps({"error": 'model "does-not-exist:1b" not found'})]
+
+    class FakeStream:
+        async def __aenter__(self) -> "FakeStream":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def aiter_lines(self) -> Any:
+            for line in chunks:
+                yield line
+
+    fake_client = MagicMock()
+    fake_client.stream = MagicMock(return_value=FakeStream())
+    monkeypatch.setattr(main, "client", fake_client)
+    r = client.post(
+        "/api/chat",
+        json={"model": "does-not-exist:1b", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 200
+    assert '"type": "error"' in r.text
+    # Ollama's own message IS the fix-it hint — forwarded, not scrubbed.
+    assert "not found" in r.text
+
+
+def test_pull_normalizes_bare_error_chunk(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """Pull failures arrive as `{"error": ...}` with no status field; the
+    backend must normalize to the `{"status": "error"}` shape the UI handles."""
+    chunks = [json.dumps({"error": "pull model manifest: file does not exist"})]
+
+    class FakeStream:
+        async def __aenter__(self) -> "FakeStream":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def aiter_lines(self) -> Any:
+            for line in chunks:
+                yield line
+
+    fake_client = MagicMock()
+    fake_client.stream = MagicMock(return_value=FakeStream())
+    monkeypatch.setattr(main, "client", fake_client)
+    r = client.post("/api/pull", json={"model": "does-not-exist:1b"})
+    assert r.status_code == 200
+    assert '"status": "error"' in r.text
+    assert "file does not exist" in r.text
+
+
+def test_resolve_ollama_url_rewrites_listen_addresses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`0.0.0.0` / `[::]` are listen addresses (typical systemd OLLAMA_HOST) —
+    rewrite to loopback instead of failing the loopback guard."""
+    monkeypatch.delenv("OCTOPUS_ALLOW_REMOTE_OLLAMA", raising=False)
+    monkeypatch.setenv("OLLAMA_URL", "http://0.0.0.0:11435")
+    assert main._resolve_ollama_url() == "http://127.0.0.1:11435"
+    monkeypatch.setenv("OLLAMA_URL", "http://[::]:11435")
+    assert main._resolve_ollama_url() == "http://[::1]:11435"
+    monkeypatch.delenv("OLLAMA_URL", raising=False)
+    monkeypatch.setenv("OLLAMA_HOST", "0.0.0.0:11435")
+    assert main._resolve_ollama_url() == "http://127.0.0.1:11435"
+
+
 def test_gpu_endpoint_skips_malformed_line(
     monkeypatch: pytest.MonkeyPatch, client: TestClient
 ) -> None:

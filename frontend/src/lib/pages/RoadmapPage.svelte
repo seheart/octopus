@@ -124,7 +124,7 @@
     {
       label: 'Tier 2 governance — actually rock solid now',
       detail:
-        'Playwright E2E (8 smoke tests, mocked /api so no Ollama needed) · knip dead-code detection · pip-audit + npm audit (caught 2 CVEs on the first run) · Dependabot weekly · branch protection on main. CI now has 3 jobs (Frontend / Backend / E2E) all required.'
+        'Playwright E2E (8 smoke tests, mocked /api so no Ollama needed) · knip dead-code detection · pip-audit + npm audit (caught 2 CVEs on the first run) · Dependabot weekly. (CI + branch protection were later removed in the May 2026 solo-dev cleanup — everything still runs locally via pre-commit + npm run validate.)'
     },
     {
       label: 'Tier 1 governance + design system',
@@ -142,8 +142,9 @@
         'FastAPI backend streams Ollama with TTFT and tokens/sec from eval_count/eval_duration. nvidia-smi parsed for VRAM bar in chat sidebar and System page.'
     },
     {
-      label: 'GitHub repo + CI green',
-      detail: 'Repo synced to seheart/octopus; CI runs all 3 jobs under 90s on every push/PR.'
+      label: 'GitHub repo',
+      detail:
+        'Repo synced to seheart/octopus. (The original CI — 3 jobs under 90s — was removed in the May 2026 solo-dev cleanup; validation is local now.)'
     }
   ];
 

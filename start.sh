@@ -25,6 +25,11 @@ resolve_ollama_url() {
 }
 
 OLLAMA_URL=$(resolve_ollama_url)
+# `0.0.0.0` / `[::]` are *listen* addresses, not connectable ones — typical
+# when the systemd unit sets OLLAMA_HOST=0.0.0.0:PORT. Rewrite to loopback so
+# the probe below and the backend actually reach the daemon.
+# (backend/main.py applies the same rewrite for direct uvicorn runs.)
+OLLAMA_URL=$(printf '%s' "$OLLAMA_URL" | sed -e 's|//0\.0\.0\.0|//127.0.0.1|' -e 's|//\[::\]|//[::1]|')
 export OLLAMA_URL
 
 if ! curl -sf "$OLLAMA_URL/api/version" >/dev/null 2>&1; then

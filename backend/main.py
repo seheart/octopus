@@ -29,6 +29,15 @@ def _resolve_ollama_url() -> str:
             raw = host if host.startswith(("http://", "https://")) else f"http://{host}"
         else:
             raw = "http://127.0.0.1:11434"
+    # `0.0.0.0` / `::` are *listen* addresses, not connectable ones — typical
+    # when inheriting a systemd unit's OLLAMA_HOST=0.0.0.0:PORT. Rewrite to
+    # loopback so pointing Octopus at the daemon's own env just works.
+    # (start.sh applies the same rewrite for its preflight probe.)
+    _LISTEN_TO_LOOPBACK = {"0.0.0.0": "127.0.0.1", "::": "[::1]"}
+    parsed = urlparse(raw)
+    if (loopback := _LISTEN_TO_LOOPBACK.get(parsed.hostname or "")) is not None:
+        netloc = f"{loopback}:{parsed.port}" if parsed.port else loopback
+        raw = parsed._replace(netloc=netloc).geturl()
     # Refuse non-loopback hosts unless explicitly allowed — otherwise a stray
     # OLLAMA_URL in shell init silently exfiltrates every chat to a remote.
     if os.environ.get("OCTOPUS_ALLOW_REMOTE_OLLAMA") != "1":
@@ -354,6 +363,16 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                         chunk = json.loads(raw)
                     except json.JSONDecodeError:
                         continue
+                    # Ollama reports failures (model missing, OOM, …) as an
+                    # `{"error": ...}` line with no `message`/`done` — on both
+                    # non-200 responses and mid-stream faults. Without this
+                    # branch the stream just ends and the UI shows an empty
+                    # reply. The text comes from local Ollama and *is* the
+                    # fix-it hint ('model "x" not found'), so forward it.
+                    if chunk.get("error"):
+                        log.warning("ollama chat error: %s", chunk["error"])
+                        yield _sse({"type": "error", "message": str(chunk["error"])[:500]})
+                        return
                     msg = chunk.get("message", {})
                     # Reasoning models (qwen3, deepseek-r1, etc.) stream into
                     # `thinking` before producing `content`. Forward both so the
@@ -450,6 +469,11 @@ async def pull_model(req: PullRequest) -> StreamingResponse:
                         chunk = json.loads(raw)
                     except json.JSONDecodeError:
                         continue
+                    # Ollama pull failures arrive as a bare `{"error": ...}`
+                    # line with no status; normalize to the {"status": "error"}
+                    # shape the UI handles so bad model names don't fail silently.
+                    if chunk.get("error") and chunk.get("status") != "error":
+                        chunk = {"status": "error", "error": str(chunk["error"])[:500]}
                     yield _sse(chunk)
         except httpx.RequestError as e:
             log.warning("pull stream failed: %s", e)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 # Pre-commit: design-system pattern check + secret scan. Both are fast.
-# Full lint/type/test runs in CI.
+# Full lint/type/test: npm run validate (no CI — solo-dev, local gates).
 bash scripts/validate-patterns.sh frontend/src
 bash scripts/secret-scan.sh
