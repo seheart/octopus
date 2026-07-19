@@ -19,6 +19,9 @@
   let loaded = $state([]);
   let loading = $state(true);
   let err = $state(null);
+  // Kept separate from `err`: a failed delete/unload must not replace the
+  // (still perfectly loaded) model list with the load-error card.
+  let actionErr = $state(null);
   let unloadingName = $state('');
 
   /** @type {ReturnType<typeof setInterval> | undefined} */
@@ -61,11 +64,12 @@
     e?.stopPropagation();
     if (unloadingName) return;
     unloadingName = name;
+    actionErr = null;
     try {
       await unloadModel(name);
       await refresh();
     } catch (e2) {
-      err = e2.message;
+      actionErr = e2.message;
     } finally {
       unloadingName = '';
     }
@@ -79,12 +83,13 @@
       `Delete ${name}?\n\nThis frees ${fmtBytes(size)} on disk. The model can be re-installed later from the catalog.`
     );
     if (!ok) return;
+    actionErr = null;
     try {
       await deleteModel(name);
       if (selectedModel.value === name) setModel('');
       await refresh();
     } catch (e2) {
-      err = e2.message;
+      actionErr = e2.message;
     }
   }
 </script>
@@ -134,6 +139,12 @@
       <div class="text-xs font-mono text-muted uppercase tracking-wider mb-2">
         Installed · {models.length}
       </div>
+
+      {#if actionErr}
+        <div class="text-error text-xs font-mono mb-2" role="alert">
+          That didn't work: {actionErr}
+        </div>
+      {/if}
 
       {#if loading}
         <div class="text-muted text-sm font-mono">Loading…</div>

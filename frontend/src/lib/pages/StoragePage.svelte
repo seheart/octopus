@@ -8,6 +8,9 @@
   let models = $state([]);
   let host = $state(null);
   let err = $state(null);
+  // Kept separate from `err`: a failed delete must not replace the (still
+  // perfectly loaded) model list with the load-error card.
+  let deleteErr = $state(null);
   let loading = $state(true);
   /** @type {ReturnType<typeof setInterval> | undefined} */
   let pollHandle;
@@ -46,12 +49,13 @@
       `Delete ${name}?\n\nThis frees ${fmtBytes(size)} on disk. The model can be re-installed later from the catalog.`
     );
     if (!ok) return;
+    deleteErr = null;
     try {
       await deleteModel(name);
       if (selectedModel.value === name) setModel('');
       await refresh();
     } catch (e) {
-      err = e.message;
+      deleteErr = e.message;
     }
   }
 </script>
@@ -124,6 +128,12 @@
           manage in Models →
         </button>
       </div>
+
+      {#if deleteErr}
+        <div class="text-error text-xs font-mono mb-2" role="alert">
+          That didn't work: {deleteErr}
+        </div>
+      {/if}
 
       {#if loading}
         <div class="text-muted text-sm font-mono">Loading…</div>

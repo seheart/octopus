@@ -162,12 +162,14 @@
             <Button variant="primary">primary</Button>
             <Button variant="secondary">secondary</Button>
             <Button variant="ghost">ghost</Button>
+            <Button variant="danger">danger</Button>
             <Button disabled>disabled</Button>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
             <Button size="sm" variant="primary">sm primary</Button>
             <Button size="sm" variant="secondary">sm secondary</Button>
             <Button size="sm" variant="ghost">sm ghost</Button>
+            <Button size="sm" variant="danger">sm danger</Button>
           </div>
         </div>
       </Section>
@@ -231,7 +233,7 @@
             <Code>lib/components/ui/</Code>. If a primitive is missing, add it here first.
           </li>
           <li>
-            Pre-commit + CI enforce these via stylelint, eslint, and
+            Pre-commit and <Code>npm run validate</Code> enforce these via stylelint, eslint, and
             <Code>scripts/validate-patterns.sh</Code>.
           </li>
         </ul>

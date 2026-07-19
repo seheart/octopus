@@ -125,7 +125,7 @@
     checks = checks.map((c) => (c.id === id ? { ...c, expanded: !c.expanded } : c));
   }
 
-  function copyReport() {
+  async function copyReport() {
     const lines = [];
     lines.push('# Octopus diagnostic report');
     if (runFinishedAt) {
@@ -163,9 +163,13 @@
         }
       }
     }
-    navigator.clipboard.writeText(lines.join('\n'));
-    copied = true;
-    setTimeout(() => (copied = false), 1500);
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      copied = true;
+      setTimeout(() => (copied = false), 1500);
+    } catch (_e) {
+      // Clipboard permission denied — don't claim "copied!" when we didn't.
+    }
   }
 </script>
 

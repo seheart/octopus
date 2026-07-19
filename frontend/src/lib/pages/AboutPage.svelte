@@ -25,7 +25,7 @@
       ['pip-audit', 'dependency vulnerability scan']
     ],
     infra: [
-      ['GitHub Actions', 'CI on every push and PR'],
+      ['npm run validate', 'full local gate: lint, types, tests, coverage'],
       ['Husky', 'pre-commit hook'],
       ['Dependabot', 'automated dependency PRs'],
       ['validate-patterns.sh', 'design-system enforcement']
@@ -44,14 +44,14 @@
         'Buttons, cards, sections, tags, and stat rows have one canonical implementation in src/lib/components/ui/. Need a new variant? Add it there first; never paste-shape a one-off.'
     },
     {
-      title: 'Tests gate merges',
+      title: 'Tests gate every change',
       detail:
-        'CI runs lint, type-check, unit tests, E2E, and a 70% coverage gate on the backend. Coverage drop, type error, or pattern violation fails the merge.'
+        'npm run validate runs lint, type-check, unit tests, and a 70% coverage gate on the backend. Coverage drop, type error, or pattern violation fails the run — nothing ships around it.'
     },
     {
       title: 'Tooling, not memory',
       detail:
-        'Conventions are enforced by tools, not by remembering. Pre-commit catches drift locally; CI catches it on the way in.'
+        'Conventions are enforced by tools, not by remembering. Pre-commit catches drift at commit time; npm run validate catches the rest before it ships.'
     }
   ];
 </script>
@@ -73,11 +73,10 @@
       <Section title="why this exists">
         <p class="text-sm text-body leading-relaxed mb-2">
           Open WebUI and LM Studio cover chat. <Code>ollama ps</Code> and <Code>nvidia-smi</Code> cover
-          stats. Promptfoo covers benchmarks. Nothing covers all three in one window.
+          stats. Octopus puts both in one window — benchmarks and side-by-side comparison are on the roadmap.
         </p>
         <p class="text-sm text-body leading-relaxed">
-          The eight tentacles fit: each "arm" runs a different model, the central UI coordinates the
-          comparison.
+          The eight tentacles fit: each "arm" is a different model, the central UI watches them all.
         </p>
       </Section>
     </Card>

@@ -553,7 +553,9 @@
       {#if !gpu || !gpu.available}
         <div class="text-muted text-xs">Not available.</div>
       {:else}
-        {#each gpu.gpus as g (g.name)}
+        <!-- Index-keyed: two identical cards share a name, and duplicate
+             keys crash a keyed each. -->
+        {#each gpu.gpus as g, gi (gi)}
           <div class="space-y-1.5 font-mono">
             <div class="text-body text-xs truncate">{g.name}</div>
             <div>

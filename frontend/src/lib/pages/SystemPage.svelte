@@ -186,7 +186,9 @@
         {#if !gpu || !gpu.available}
           <div class="text-muted text-sm">No GPU detected (or nvidia-smi unavailable).</div>
         {:else}
-          {#each gpu.gpus as g (g.name)}
+          <!-- Index-keyed: two identical cards share a name, and duplicate
+               keys crash a keyed each. -->
+          {#each gpu.gpus as g, gi (gi)}
             <div class="space-y-3">
               <div class="text-heading font-mono">{g.name}</div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
