@@ -461,8 +461,7 @@
             rows="2"
             class="flex-1 bg-surface-2 border border-border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-accent text-body disabled:opacity-60"
             disabled={streaming || !selectedModel.value}
-            aria-label="Message"
-          ></textarea>
+            aria-label="Message"></textarea>
           {#if streaming}
             <Button variant="danger" size="lg" onclick={stop} ariaLabel="Stop generation">
               Stop

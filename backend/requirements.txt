@@ -1,5 +1,5 @@
-fastapi==0.136.3
+fastapi==0.139.2
 # starlette pulled by fastapi; pinned explicitly to clear PYSEC-2026-161.
 starlette>=1.0.1
-uvicorn[standard]==0.48.0
+uvicorn[standard]==0.51.0
 httpx==0.28.1
